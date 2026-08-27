@@ -134,10 +134,12 @@ def test_per_class_metrics_are_read_from_the_runs_own_predictions(tmp_path, monk
     checkpoint = tmp_path / "model.pt"
     checkpoint.touch()
     probabilities = np.eye(4, 3)[[0, 1, 2, 0]]      # 3 classes, one mistake
-    np.savez(tmp_path / "test_predictions.npz", probabilities=probabilities,
-             targets=np.array([0, 1, 2, 1]))
+    predictions = tmp_path / "test_predictions.npz"
+    np.savez(predictions, probabilities=probabilities, targets=np.array([0, 1, 2, 1]))
 
-    classifier = ManometryClassifier(dataclasses.replace(SETTINGS, checkpoint_path=checkpoint))
+    classifier = ManometryClassifier(
+        dataclasses.replace(SETTINGS, checkpoint_path=checkpoint, predictions_path=predictions)
+    )
     classifier.classes = ["a", "b", "c"]
     rows = classifier._per_class_metrics()
 
@@ -156,7 +158,11 @@ def test_per_class_metrics_are_absent_when_the_run_did_not_store_them(tmp_path):
 
     checkpoint = tmp_path / "model.pt"
     checkpoint.touch()
-    classifier = ManometryClassifier(dataclasses.replace(SETTINGS, checkpoint_path=checkpoint))
+    classifier = ManometryClassifier(
+        dataclasses.replace(
+            SETTINGS, checkpoint_path=checkpoint, predictions_path=tmp_path / "absent.npz"
+        )
+    )
     classifier.classes = ["a", "b"]
     assert classifier._per_class_metrics() is None
 
@@ -170,8 +176,11 @@ def test_per_class_metrics_refuse_a_mismatched_prediction_file(tmp_path):
 
     checkpoint = tmp_path / "model.pt"
     checkpoint.touch()
-    np.savez(tmp_path / "test_predictions.npz", probabilities=np.eye(3), targets=np.arange(3))
+    predictions = tmp_path / "test_predictions.npz"
+    np.savez(predictions, probabilities=np.eye(3), targets=np.arange(3))
 
-    classifier = ManometryClassifier(dataclasses.replace(SETTINGS, checkpoint_path=checkpoint))
+    classifier = ManometryClassifier(
+        dataclasses.replace(SETTINGS, checkpoint_path=checkpoint, predictions_path=predictions)
+    )
     classifier.classes = ["a", "b"]           # two classes, file holds three
     assert classifier._per_class_metrics() is None

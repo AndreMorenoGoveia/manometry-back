@@ -1,0 +1,36 @@
+# Render blueprint. `render.yaml` at the repo root is picked up by
+# "New > Blueprint"; everything below can also be set by hand in the dashboard.
+services:
+  - type: web
+    name: manometry-back
+    runtime: python
+    plan: standard          # 2 GB RAM. The 512 MB plans cannot hold the encoder.
+    buildCommand: pip install -r requirements-cpu.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /api/health
+    envVars:
+      # A tensor file does not belong in git; point this at a release asset and
+      # the first boot fetches it into MANOMETRY_CHECKPOINT.
+      - key: MANOMETRY_CHECKPOINT_URL
+        sync: false
+      - key: MANOMETRY_CHECKPOINT
+        value: /tmp/manometry/model.pt
+      - key: MANOMETRY_RESULT_JSON
+        value: assets/model/result.json
+      - key: MANOMETRY_CALIBRATION
+        value: assets/model/image_chicago_calibration.json
+      - key: MANOMETRY_DEVICE
+        value: cpu
+      # One worker, one thread: the host reports every core of the machine and
+      # gives the container a fraction of one, and oversubscribing makes the
+      # forward pass slower.
+      - key: MANOMETRY_TORCH_THREADS
+        value: "2"
+      - key: MANOMETRY_LAZY_MODEL
+        value: "false"       # load at boot, so the health check gates traffic
+      - key: MANOMETRY_ALLOWED_ORIGINS
+        sync: false          # https://seu-projeto.vercel.app
+      - key: MANOMETRY_ALLOWED_ORIGIN_REGEX
+        value: https://.*\.vercel\.app
+      - key: PYTHON_VERSION
+        value: "3.12.7"

@@ -13,11 +13,11 @@ from pydantic import BaseModel, ConfigDict, Field
 SWALLOW_PATTERNS: dict[str, dict[str, str]] = {
     "failed": {
         "label": "Falha",
-        "description": "Sem contração mensurável — DCI abaixo de 100 mmHg·s·cm.",
+        "description": "Sem contração mensurável, com DCI abaixo de 100 mmHg·s·cm.",
     },
     "weak": {
         "label": "Fraca",
-        "description": "Contração ineficaz — DCI entre 100 e 450 mmHg·s·cm.",
+        "description": "Contração ineficaz, com DCI entre 100 e 450 mmHg·s·cm.",
     },
     "fragmented": {
         "label": "Fragmentada",
@@ -29,7 +29,7 @@ SWALLOW_PATTERNS: dict[str, dict[str, str]] = {
     },
     "hypercontractile": {
         "label": "Hipercontrátil",
-        "description": "Vigor excessivo — DCI acima de 8.000 mmHg·s·cm.",
+        "description": "Vigor excessivo, com DCI acima de 8.000 mmHg·s·cm.",
     },
     "premature": {
         "label": "Prematura",
@@ -136,6 +136,7 @@ class ModelCard(BaseModel):
     device: str = "cpu"
     selected_epoch: int | None = None
     selected_weights: str | None = None
+    tta: bool = False
     test_metrics: dict[str, float] | None = None
     val_metrics: dict[str, float] | None = None
     exam_counts: dict[str, int] | None = None

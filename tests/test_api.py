@@ -207,3 +207,32 @@ def test_openapi_documents_the_analyze_route():
     schema = client.get("/openapi.json").json()
     assert "/api/analyze" in schema["paths"]
     assert "AnalysisResponse" in schema["components"]["schemas"]
+
+
+def test_the_forward_pass_does_not_run_on_the_event_loop(tmp_path, monkeypatch):
+    """Scoring is blocking work and belongs on a worker thread.
+
+    Inline on the event loop it would stall every other request, health checks
+    included, for the whole length of the analysis. A function running on the
+    loop's own thread can see a running loop; one on a worker thread cannot,
+    which is what this asserts.
+    """
+    import asyncio
+
+    seen: dict[str, bool] = {}
+
+    def record(swallows, **kwargs):
+        try:
+            asyncio.get_running_loop()
+            seen["on_loop"] = True
+        except RuntimeError:
+            seen["on_loop"] = False
+        return _fake_reading(len(swallows))
+
+    monkeypatch.setattr(CLASSIFIER, "analyse", record)
+    monkeypatch.setattr(CLASSIFIER, "card", {"classes": list(CLASS_ORDER)})
+    payload = _laudo_bytes(tmp_path, panels=1, placeholders=0)
+
+    response = client.post("/api/analyze", files={"file": ("laudo.docx", payload, DOCX_MIME)})
+    assert response.status_code == 200
+    assert seen["on_loop"] is False, "a inferencia rodou na thread do event loop"

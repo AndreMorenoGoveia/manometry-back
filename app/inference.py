@@ -6,9 +6,9 @@ GPU-sized unit of work, so serialising is what keeps concurrent uploads from
 fighting over VRAM instead of speeding anything up.
 
 Everything the UI shows about *why* a study was called comes from the same
-tensors the classifier itself consumed — the image-calibrated Chicago v4.0
+tensors the classifier itself consumed (the image-calibrated Chicago v4.0
 proxies per swallow, their CC v4.0 contractility pattern, and the per-swallow
-posteriors of the instance head — so the explanation cannot drift from the
+posteriors of the instance head), so the explanation cannot drift from the
 prediction.
 """
 from __future__ import annotations
@@ -24,8 +24,16 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from .config import SETTINGS, Settings
-from .model import HeavyExamModel, MAX_SWALLOWS, stack_exam, to_cache_window, to_model_input
+from .config import SETTINGS, Settings, fetch_checkpoint
+from .model import (
+    MAX_SWALLOWS,
+    TTA_OFFSETS,
+    HeavyExamModel,
+    stack_exam,
+    to_cache_square,
+    to_model_input,
+    window,
+)
 from .vendor.chicago import (
     DCI_FAILED,
     DCI_HYPER,
@@ -139,6 +147,7 @@ class ManometryClassifier:
         self._lock = threading.Lock()
         self._model: HeavyExamModel | None = None
         self.device = None
+        self.tta = False
         self._torch = None
         self.classes: list[str] = []
         self.calibration: ImageCalibration | None = None
@@ -179,17 +188,29 @@ class ManometryClassifier:
             import torch
 
             self._torch = torch
+            if self.settings.torch_threads > 0:
+                torch.set_num_threads(self.settings.torch_threads)
+            checkpoint = fetch_checkpoint(self.settings)
             # The checkpoint is a local build artifact of the sibling training
             # repository and stores numpy standardisation arrays alongside the
             # tensors, which the weights-only unpickler cannot rebuild.
-            payload = torch.load(
-                self.settings.checkpoint_path, map_location="cpu", weights_only=False
-            )
+            payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
             config = payload.get("config", {})
             self.classes = list(payload["classes"])
             self.study_mean = np.asarray(payload["study_mean"], dtype=np.float32)
             self.study_std = np.asarray(payload["study_std"], dtype=np.float32)
             self.calibration = ImageCalibration.load(self.settings.calibration_path)
+            # Reproduce the run by default: it chose between the centre window
+            # and the five-crop average on its own validation examinations, and
+            # recorded which one it kept in `result.json`, not in the checkpoint.
+            # `MANOMETRY_TTA` overrides, because on a CPU-only host five forward
+            # passes may not be worth the accuracy.
+            result = self._result()
+            self.tta = (
+                bool(result.get("tta_selected", False))
+                if self.settings.tta is None
+                else self.settings.tta
+            )
 
             model = HeavyExamModel(
                 payload["encoder"],
@@ -207,15 +228,25 @@ class ManometryClassifier:
             self._model = model
             self.card = self._build_card(payload)
 
+    def _result(self) -> dict:
+        """The training run's `result.json`, or an empty dict when it is absent."""
+        path = self.settings.result_path
+        if not path.is_file():
+            return {}
+        try:
+            return json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return {}
+
     def _per_class_metrics(self) -> list[dict] | None:
         """Precision, recall and F1 per class, from the run's own test predictions.
 
         The training script stores the probabilities it produced on the held-out
         examinations next to the checkpoint, so this is read off that file rather
-        than recomputed — the interface reports the run's numbers, not numbers
-        this process invented.
+        than recomputed: the interface reports the run's numbers, not numbers this
+        process invented.
         """
-        path = self.settings.checkpoint_path.parent / "test_predictions.npz"
+        path = self.settings.predictions_path
         if not path.is_file():
             return None
         try:
@@ -247,13 +278,7 @@ class ManometryClassifier:
         ]
 
     def _build_card(self, payload: dict) -> dict:
-        result: dict = {}
-        path = self.settings.result_path
-        if path.is_file():
-            try:
-                result = json.loads(path.read_text())
-            except (OSError, json.JSONDecodeError):
-                result = {}
+        result = self._result()
         selection = payload.get("selection", {})
         return {
             "encoder": payload.get("encoder"),
@@ -264,8 +289,17 @@ class ManometryClassifier:
             "device": str(getattr(self, "device", "cpu")),
             "selected_epoch": selection.get("epoch"),
             "selected_weights": selection.get("weights"),
-            "test_metrics": result.get("test_metrics"),
-            "val_metrics": result.get("val_metrics"),
+            "tta": self.tta,
+            # Publish the numbers of the path this service actually runs, not
+            # whichever line of the result file reads best.
+            "test_metrics": (
+                result.get("test_metrics_tta") if self.tta else result.get("test_metrics_centre")
+            )
+            or result.get("test_metrics"),
+            "val_metrics": (
+                result.get("val_metrics_tta") if self.tta else result.get("val_metrics")
+            )
+            or result.get("val_metrics"),
             "exam_counts": result.get("exam_counts"),
             "per_class": self._per_class_metrics(),
             "calibration": {
@@ -310,28 +344,39 @@ class ManometryClassifier:
         study = study_features(used)
         standardised = ((study - self.study_mean) / self.study_std).astype(np.float32)
 
-        windows = [to_cache_window(image) for image in swallows[:MAX_SWALLOWS]]
-        images, mask = stack_exam(windows)
+        squares = [to_cache_square(image) for image in swallows[:MAX_SWALLOWS]]
+        offsets = TTA_OFFSETS if self.tta else (TTA_OFFSETS[0],)
+        study = torch.from_numpy(standardised).unsqueeze(0)
 
+        exam_probabilities = np.zeros(len(self.classes))
+        swallow_probabilities = np.zeros((MAX_SWALLOWS, len(self.classes)))
         with self._lock:
             with torch.inference_mode():
-                pixels = to_model_input(
-                    images.reshape(-1, *images.shape[2:]), self.device
-                ).reshape(1, MAX_SWALLOWS, 3, images.shape[2], images.shape[3])
-                with torch.autocast(
-                    "cuda", dtype=torch.bfloat16, enabled=self.device.type == "cuda"
-                ):
-                    exam_logits, instance_logits = self._model(
-                        pixels,
-                        mask.to(self.device),
-                        torch.from_numpy(standardised).unsqueeze(0).to(self.device),
+                # The crops are run one at a time rather than as one batch of
+                # five: same arithmetic, a fifth of the peak memory.
+                for offset in offsets:
+                    images, mask = stack_exam([window(square, offset) for square in squares])
+                    flat = images.reshape(-1, *images.shape[2:])
+                    pixels = to_model_input(flat, self.device).reshape(
+                        1, MAX_SWALLOWS, 3, images.shape[2], images.shape[3]
                     )
-                exam_probabilities = (
-                    torch.softmax(exam_logits.float(), dim=1)[0].cpu().numpy().astype(np.float64)
-                )
-                swallow_probabilities = (
-                    torch.softmax(instance_logits.float(), dim=2)[0].cpu().numpy().astype(np.float64)
-                )
+                    with torch.autocast(
+                        "cuda", dtype=torch.bfloat16, enabled=self.device.type == "cuda"
+                    ):
+                        exam_logits, instance_logits = self._model(
+                            pixels, mask.to(self.device), study.to(self.device)
+                        )
+                    exam_probabilities += (
+                        torch.softmax(exam_logits.float(), dim=1)[0].cpu().numpy().astype(np.float64)
+                    )
+                    swallow_probabilities += (
+                        torch.softmax(instance_logits.float(), dim=2)[0]
+                        .cpu()
+                        .numpy()
+                        .astype(np.float64)
+                    )
+        exam_probabilities /= len(offsets)
+        swallow_probabilities /= len(offsets)
 
         readings: list[SwallowReading] = []
         for position, (image, row) in enumerate(zip(swallows, rows)):

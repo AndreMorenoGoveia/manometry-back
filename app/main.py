@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 
 from . import __version__
 from .config import LAZY_MODEL, SETTINGS
@@ -59,9 +61,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# A deployed frontend gets a fresh origin per preview build, so the exact list
+# is paired with an optional regex (e.g. `https://.*\.vercel\.app`).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=SETTINGS.allowed_origins or ["*"],
+    allow_origin_regex=SETTINGS.allowed_origin_regex or None,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
@@ -283,12 +288,26 @@ def _sample_exams(slug: str) -> list:
     return sorted((SETTINGS.dataset_root / "test" / slug).glob("exam_*"))
 
 
+def _prebuilt_sample(slug: str) -> Path | None:
+    """A demo laudo written ahead of time by scripts/build_sample_reports.py.
+
+    A deployed instance has no corpus mounted, so this is the only way it can
+    offer a file to try. Whether those files ship is a decision about publishing
+    patient-derived images, and it belongs to whoever deploys: the directory is
+    ignored by git until they choose otherwise.
+    """
+    candidate = SETTINGS.sample_dir / f"{slug}.docx"
+    return candidate if candidate.is_file() else None
+
+
 @app.get("/api/samples", tags=["reference"])
 def samples() -> dict:
-    """Which diagnoses a demo laudo can be generated for on this machine."""
+    """Which diagnoses a demo laudo can be offered for on this instance."""
     return {
         "available": [
-            disease.slug for disease in DISEASES if len(_sample_exams(disease.slug)) > 0
+            disease.slug
+            for disease in DISEASES
+            if _prebuilt_sample(disease.slug) is not None or _sample_exams(disease.slug)
         ]
     }
 
@@ -299,7 +318,7 @@ def sample_report(diagnosis: str, seed: int = 0) -> Response:
 
     The corpus is stored already cropped, so the panels are re-framed with the
     white UI chrome the Multiplex export carries. Uploading the result therefore
-    exercises the whole path — reader, cropper, colour inversion, classifier —
+    exercises the whole path (reader, cropper, colour inversion, classifier)
     exactly as a laudo from the hospital would.
     """
     try:
@@ -307,11 +326,19 @@ def sample_report(diagnosis: str, seed: int = 0) -> Response:
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
+    prebuilt = _prebuilt_sample(diagnosis)
+    if prebuilt is not None:
+        return Response(
+            content=prebuilt.read_bytes(),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="laudo_{diagnosis}.docx"'},
+        )
+
     exams = _sample_exams(diagnosis)
     if not exams:
         raise HTTPException(
             status_code=404,
-            detail=f"O corpus de exemplo nao esta disponivel em {SETTINGS.dataset_root}.",
+            detail="Nenhum laudo de exemplo disponivel nesta instancia.",
         )
     exam = exams[seed % len(exams)]
     payload = build_docx_bytes(
@@ -338,22 +365,36 @@ async def analyze(file: UploadFile = File(...)) -> AnalysisResponse:
             detail="Envie o laudo de manometria em .docx (ou .rtf, o formato original do Multiplex).",
         )
 
-    data = await file.read()
+    # Read to the cap and stop there, rather than pulling an arbitrarily large
+    # body into memory only to reject it afterwards.
+    limit = SETTINGS.max_upload_bytes
+    chunks: list[bytes] = []
+    received = 0
+    while True:
+        chunk = await file.read(1 << 20)
+        if not chunk:
+            break
+        received += len(chunk)
+        if received > limit:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Arquivo acima do limite de {limit // (1024 * 1024)} MB.",
+            )
+        chunks.append(chunk)
+    data = b"".join(chunks)
     if not data:
         raise HTTPException(status_code=400, detail="Arquivo vazio.")
-    if len(data) > SETTINGS.max_upload_bytes:
-        raise HTTPException(
-            status_code=413,
-            detail=f"Arquivo acima do limite de {SETTINGS.max_upload_bytes // (1024 * 1024)} MB.",
-        )
 
+    # Decoding ten PNGs and running a 90M-parameter encoder are both blocking
+    # work; on the event loop they would stall every other request for the
+    # length of the analysis, health checks included.
     try:
-        swallows, panels = read_swallows(data, filename)
+        swallows, panels = await run_in_threadpool(read_swallows, data, filename)
     except ReportError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
     try:
-        reading = CLASSIFIER.analyse(swallows)
+        reading = await run_in_threadpool(CLASSIFIER.analyse, swallows)
     except ModelUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
 

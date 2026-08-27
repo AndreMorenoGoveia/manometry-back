@@ -7,11 +7,11 @@ upstream and re-sync instead.
 
 | file | origin | commit |
 |---|---|---|
-| `swallow_crop.py` | `manometry-data-unifier` — `unifier/images.py` | `fd6ab6f` |
-| `rtf_laudo.py` | `manometry-data-unifier` — `unifier/rtf.py` | `fd6ab6f` |
-| `chicago.py` | `manometry-classification` — `experiments/chicago.py` | `fdd46eb` |
-| `image_chicago.py` | `manometry-classification` — `experiments/image_chicago.py` | `fdd46eb` |
-| `fusion_models.py` | `manometry-classification` — `experiments/fusion_models.py` | `fdd46eb` |
+| `swallow_crop.py` | `manometry-data-unifier` · `unifier/images.py` | `fd6ab6f` |
+| `rtf_laudo.py` | `manometry-data-unifier` · `unifier/rtf.py` | `fd6ab6f` |
+| `chicago.py` | `manometry-classification` · `experiments/chicago.py` | `fdd46eb` |
+| `image_chicago.py` | `manometry-classification` · `experiments/image_chicago.py` | `fdd46eb` |
+| `fusion_models.py` | `manometry-classification` · `experiments/fusion_models.py` | `fdd46eb` |
 
 The only edit applied on copy is the import line of `image_chicago.py`
 (`from chicago import ...` -> `from .chicago import ...`), because upstream runs

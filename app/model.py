@@ -3,9 +3,10 @@
 The architecture and the preprocessing here are a transcription of the winning
 training run (``run_fusion_heavy.py`` / ``common.py`` in
 ``manometry-classification``): a ConvNeXt-Base ImageNet-22k encoder over the ten
-swallow panels, a per-swallow instance head, and the ``chicago_set`` fusion —
-a Chicago v4.0 aggregator over the per-swallow posteriors and image-calibrated
-metrics, concatenated with a Set Transformer over the swallow embeddings.
+swallow panels, a per-swallow instance head, and the ``chicago_set`` fusion,
+which is a Chicago v4.0 aggregator over the per-swallow posteriors and
+image-calibrated metrics concatenated with a Set Transformer over the swallow
+embeddings.
 
 Two deliberate differences from the training file, neither of which changes a
 single weight or activation:
@@ -37,6 +38,12 @@ CACHE_SIZE = 256
 IMAGE_SIZE = 224
 EVAL_OFFSET = (CACHE_SIZE - IMAGE_SIZE) // 2
 MAX_SWALLOWS = 10
+
+# Multi-crop test-time augmentation: the centre window plus the four corners of
+# the cached 256 square, softmax-averaged. The training run decides on the
+# validation examinations whether it is worth it, and records the answer in the
+# checkpoint.
+TTA_OFFSETS: tuple[tuple[int, int], ...] = ((16, 16), (0, 0), (0, 32), (32, 0), (32, 32))
 
 IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
 IMAGENET_STD = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
@@ -116,18 +123,26 @@ class HeavyExamModel(nn.Module):
 # ------------------------------------------------------------- preprocessing
 
 
-def to_cache_window(rgb: np.ndarray) -> np.ndarray:
-    """One cropped topography -> the uint8 224 window the encoder was fed.
+def to_cache_square(rgb: np.ndarray) -> np.ndarray:
+    """One cropped topography decoded into the uint8 256 square of the cache.
 
-    Decode to a 256 square with bilinear resampling, then read the centre 224
-    window, exactly as ``common.cache_images`` and ``ExamImageDataset`` do.
+    Bilinear resampling to 256, exactly as ``common.cache_images`` does; the
+    encoder then reads a 224 window out of it.
     """
     square = Image.fromarray(np.ascontiguousarray(rgb.astype(np.uint8))).resize(
         (CACHE_SIZE, CACHE_SIZE), Image.BILINEAR
     )
-    cached = np.asarray(square, dtype=np.uint8)
-    top = left = EVAL_OFFSET
-    return np.ascontiguousarray(cached[top : top + IMAGE_SIZE, left : left + IMAGE_SIZE])
+    return np.asarray(square, dtype=np.uint8)
+
+
+def window(square: np.ndarray, offset: tuple[int, int] = (EVAL_OFFSET, EVAL_OFFSET)) -> np.ndarray:
+    top, left = offset
+    return np.ascontiguousarray(square[top : top + IMAGE_SIZE, left : left + IMAGE_SIZE])
+
+
+def to_cache_window(rgb: np.ndarray) -> np.ndarray:
+    """The centre 224 window of one cropped topography."""
+    return window(to_cache_square(rgb))
 
 
 def stack_exam(windows: list[np.ndarray]) -> tuple[torch.Tensor, torch.Tensor]:

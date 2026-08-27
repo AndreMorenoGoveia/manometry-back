@@ -1,6 +1,6 @@
 """Build a laudo `.docx` out of an exam folder of swallow topographies.
 
-The corpus this project trains on is stored *already cropped* — the white UI
+The corpus this project trains on is stored *already cropped*: the white UI
 chrome of the Multiplex screenshot was removed when the dataset was built.  A
 real report carries the uncropped panels, so this module puts the chrome back:
 the mmHg colour bar on the left, the "Eventos" header on top and the time axis

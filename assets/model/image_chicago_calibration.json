@@ -1,0 +1,12 @@
+{
+  "colour_bins": 32,
+  "max_colour_distance": 0.18,
+  "normal_images": 32,
+  "objective": 0.09300627951693405,
+  "pressure_offset": -10.0,
+  "pressure_scale": 100.0,
+  "samples": 241,
+  "sensors": 24,
+  "source": "train/normal_motility",
+  "source_digest": "624d7cb48944a0a94748328c8e51d79b2dc531d97a2822e2082d04a470cf9901"
+}

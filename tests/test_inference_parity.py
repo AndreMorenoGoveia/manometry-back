@@ -78,14 +78,24 @@ def test_service_reproduces_the_runs_test_predictions():
         f"o servico discordou do treino em {(1 - agreement) * 100:.0f}% dos exames "
         f"(desvio medio {deviation:.4f})"
     )
-    # bfloat16 autocast and a batch of one instead of six leave a small residue.
-    assert deviation < 0.01, f"desvio medio de probabilidade alto demais: {deviation:.4f}"
+    # Only the bfloat16 autocast and a batch of one instead of six separate the
+    # two paths, which is worth about 1e-4. A looser bound would also accept
+    # dropping the run's multi-crop averaging, which is worth about 4e-3, so it
+    # would stop catching the mistake this test exists for.
+    assert deviation < 1e-3, f"desvio medio de probabilidade alto demais: {deviation:.5f}"
 
 
-def test_service_matches_the_reported_accuracy():
+def test_the_card_publishes_the_numbers_of_the_path_it_runs():
+    """`/api/model` must quote the evaluation the service actually reproduces."""
     index, reference, targets, experiments = _requirements()
+    CLASSIFIER.load()
     expected = float((reference.argmax(1) == targets).mean())
-    reported = CLASSIFIER.card.get("test_metrics", {}).get("accuracy")
+    reported = (CLASSIFIER.card.get("test_metrics") or {}).get("accuracy")
     if reported is None:
         pytest.skip("result.json sem test_metrics")
-    assert abs(expected - reported) < 1e-6
+    # The stored probabilities are the ones the run kept, so the accuracy read
+    # off them is the accuracy of the path the service is set up to repeat.
+    assert abs(expected - reported) < 1e-6, (
+        "o cartao do modelo publica um numero de outra configuracao; "
+        f"esperado {expected:.4f}, publicado {reported:.4f}"
+    )

@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """Pick one textbook swallow per diagnosis and export it for the atlas.
 
-The choice is made from the image-calibrated Chicago proxies alone — the same
-numbers the service computes at request time — so it needs no GPU and cannot be
+The choice is made from the image-calibrated Chicago proxies alone, the same
+numbers the service computes at request time, so it needs no GPU and cannot be
 accused of showing whatever the classifier happens to like:
 
 1. every held-out examination of the class is measured;
 2. its study-level feature vector is compared against the class centroid, and
-   the closest examination wins — the most typical study of that diagnosis;
+   the closest examination wins, i.e. the most typical study of that diagnosis;
 3. inside it, the swallow whose CC v4.0 contractility pattern is the one that
    defines the diagnosis is exported.
 
-The PNGs land in `assets/reference/` (ignored by git — they are patient data)
+The PNGs land in `assets/reference/` (ignored by git, since they are patient data)
 and the choice is recorded in `assets/reference_manifest.json`, which is
 committed so the gallery can be rebuilt anywhere the corpus is mounted.
 
@@ -36,8 +36,8 @@ from app.diseases import CLASS_ORDER  # noqa: E402
 from app.vendor.chicago import METRIC_NAMES, study_features, swallow_pattern  # noqa: E402
 from app.vendor.image_chicago import ImageCalibration, image_swallow_metrics  # noqa: E402
 
-# When no swallow of the class reaches the signature pattern — the image-derived
-# DCI is a proxy and under-reads the extremes — the most extreme swallow in the
+# When no swallow of the class reaches the signature pattern (the image-derived
+# DCI is a proxy and under-reads the extremes), the most extreme swallow in the
 # metric that defines the diagnosis is the honest second choice.
 FALLBACK_RANK: dict[str, tuple[str, bool]] = {
     "hypercontractile_esophagus": ("dci", True),

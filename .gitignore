@@ -221,3 +221,7 @@ __marimo__/
 # with scripts/export_reference_images.py (the manifest that names them IS
 # committed).
 /assets/reference/
+
+# Laudos de demonstracao gerados por scripts/build_sample_reports.py.
+# Contem topografias reais: decida conscientemente antes de publicar.
+/assets/samples/

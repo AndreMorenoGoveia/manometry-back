@@ -6,7 +6,7 @@ were written against.  Two entries need a word of warning and carry it in their 
 text: `hypotensive_egj` is not a CC v4.0 motility diagnosis but a barrier finding
 this service's corpus labels explicitly, and `hypercontractile_esophagus` is a
 manometric pattern that CC v4.0 only calls a disorder in the presence of dysphagia
-or non-cardiac chest pain — manometry alone cannot close that diagnosis.
+or non-cardiac chest pain, and manometry alone cannot close that diagnosis.
 
 The numeric cut-offs quoted here are the CC v4.0 ones.  The values this service
 computes from an uploaded report are *image-calibrated proxies* recovered from the
@@ -47,7 +47,7 @@ class Disease:
         return asdict(self)
 
 
-_CC40 = "Chicago Classification v4.0 — Yadlapati R, et al. Neurogastroenterol Motil. 2021;33:e14058"
+_CC40 = "Chicago Classification v4.0. Yadlapati R, et al. Neurogastroenterol Motil. 2021;33:e14058"
 _HRM_PRIMER = "Gyawali CP, et al. Esophageal motility disorders: HRM interpretation. Am J Gastroenterol. 2020"
 
 DISEASES: tuple[Disease, ...] = (
@@ -109,7 +109,7 @@ DISEASES: tuple[Disease, ...] = (
             "o principal responsável por clareamento esofágico lento."
         ),
         criteria=[
-            "IRP mediana normal (≤ 15 mmHg) — a JEG não obstrui.",
+            "IRP mediana normal (≤ 15 mmHg): a JEG não obstrui.",
             "Mais de 70% das deglutições ineficazes (DCI < 450 mmHg·s·cm), ou",
             "Ao menos 50% de deglutições falhas (DCI < 100 mmHg·s·cm).",
             "A v4.0 elevou o limiar em relação à v3.0 justamente para reduzir sobrediagnóstico.",
@@ -125,8 +125,8 @@ DISEASES: tuple[Disease, ...] = (
             "Sensação de alimento parado que melhora com líquidos",
         ],
         management=(
-            "Não há tratamento motor específico eficaz. A conduta é dirigida ao refluxo — inibidor de bomba "
-            "de prótons, medidas posturais e de peso — e à orientação alimentar (mastigação, líquidos junto "
+            "Não há tratamento motor específico eficaz. A conduta é dirigida ao refluxo (inibidor de bomba "
+            "de prótons, medidas posturais e de peso) e à orientação alimentar (mastigação, líquidos junto "
             "às refeições). Em avaliação pré-fundoplicatura o achado é relevante para calibrar a válvula."
         ),
         differential=[
@@ -151,9 +151,9 @@ DISEASES: tuple[Disease, ...] = (
         accent="#38BDF8",
         tagline="Barreira antirrefluxo incompetente com corpo esofágico preservado",
         summary=(
-            "Não é um distúrbio de motilidade: é a descrição manométrica de uma barreira antirrefluxo fraca — "
-            "pressão basal da JEG baixa, frequentemente com separação entre o esfíncter inferior e a crura "
-            "diafragmática (hérnia hiatal) — em um esôfago cujo corpo contrai normalmente."
+            "Não é um distúrbio de motilidade: é a descrição manométrica de uma barreira antirrefluxo fraca, "
+            "com pressão basal da JEG baixa e frequentemente com separação entre o esfíncter inferior e a "
+            "crura diafragmática (hérnia hiatal), em um esôfago cujo corpo contrai normalmente."
         ),
         criteria=[
             "IRP mediana normal: não há obstrução da saída.",
@@ -162,7 +162,7 @@ DISEASES: tuple[Disease, ...] = (
         ],
         topography=(
             "Peristalse distal normal, mas banda de alta pressão da JEG tênue no traçado basal e, na hérnia "
-            "hiatal, duas bandas separadas — o esfíncter inferior acima e a crura diafragmática abaixo — em "
+            "hiatal, duas bandas separadas (o esfíncter inferior acima e a crura diafragmática abaixo) em "
             "vez de uma única zona de alta pressão."
         ),
         symptoms=[
@@ -206,7 +206,7 @@ DISEASES: tuple[Disease, ...] = (
         tagline="Aperistalse completa com relaxamento normal da JEG",
         summary=(
             "Todas as dez deglutições falham: não há qualquer contração organizada no corpo esofágico. "
-            "A diferença crucial em relação à acalásia é que a JEG relaxa normalmente — o esôfago não empurra, "
+            "A diferença crucial em relação à acalásia é que a JEG relaxa normalmente: o esôfago não empurra, "
             "mas também não há obstrução na saída."
         ),
         criteria=[
@@ -225,20 +225,20 @@ DISEASES: tuple[Disease, ...] = (
             "Regurgitação e clareamento esofágico muito lento",
         ],
         management=(
-            "A busca de causa sistêmica é obrigatória — esclerose sistêmica é a associação clássica, e a "
+            "A busca de causa sistêmica é obrigatória: esclerose sistêmica é a associação clássica, e a "
             "aperistalse com JEG hipotônica é praticamente a assinatura manométrica da doença. O tratamento "
             "é antirrefluxo agressivo e orientação alimentar; a fundoplicatura total é evitada pelo risco de "
             "disfagia em um esôfago que não empurra."
         ),
         differential=[
-            "Acalásia tipo I — a diferença está na IRP elevada",
+            "Acalásia tipo I, em que a IRP está elevada",
             "Motilidade esofágica ineficaz grave, em que ainda restam deglutições efetivas",
             "Artefato de aquisição / exame incompleto",
         ],
         metric_signature={
             "irp4": "≤ 15 mmHg",
             "dci": "< 100 mmHg·s·cm em 100% das deglutições",
-            "distal_latency": "não mensurável — não há contração",
+            "distal_latency": "não mensurável, pois não há contração",
         },
         prevalence=109,
         references=[
@@ -265,7 +265,7 @@ DISEASES: tuple[Disease, ...] = (
             "Pressurização panesofágica em menos de 20% das deglutições.",
         ],
         topography=(
-            "Coluna esofágica silenciosa — sem faixa de contração e sem pressurização — sob uma banda de alta "
+            "Coluna esofágica silenciosa, sem faixa de contração e sem pressurização, sob uma banda de alta "
             "pressão persistente na JEG que não se apaga durante a deglutição."
         ),
         symptoms=[
@@ -280,9 +280,9 @@ DISEASES: tuple[Disease, ...] = (
             "tratamento é, em média, menor que a do tipo II, refletindo o esôfago mais avançado."
         ),
         differential=[
-            "Acalásia tipo II — presença de pressurização panesofágica",
-            "Contratilidade ausente — IRP normal",
-            "Pseudoacalásia (neoplasia da cárdia) — obriga endoscopia e, quando suspeita, TC/eco-endoscopia",
+            "Acalásia tipo II, com pressurização panesofágica",
+            "Contratilidade ausente, com IRP normal",
+            "Pseudoacalásia (neoplasia da cárdia), que obriga endoscopia e, quando suspeita, TC ou eco-endoscopia",
         ],
         metric_signature={
             "irp4": "> 15 mmHg",
@@ -314,8 +314,8 @@ DISEASES: tuple[Disease, ...] = (
             "Pressurização panesofágica em ao menos 20% das deglutições.",
         ],
         topography=(
-            "Faixa horizontal de pressão homogênea ocupando todo o corpo esofágico simultaneamente — "
-            "sem a inclinação de uma onda peristáltica — retida acima de uma JEG que permanece fechada."
+            "Faixa horizontal de pressão homogênea ocupando todo o corpo esofágico simultaneamente, sem a "
+            "inclinação de uma onda peristáltica, retida acima de uma JEG que permanece fechada."
         ),
         symptoms=[
             "Disfagia para sólidos e líquidos",
@@ -324,14 +324,14 @@ DISEASES: tuple[Disease, ...] = (
             "Perda de peso",
         ],
         management=(
-            "Mesmo arsenal do tipo I — POEM, miotomia de Heller com fundoplicatura parcial ou dilatação "
-            "pneumática — porém com as melhores taxas de sucesso entre os subtipos, acima de 90% em séries "
+            "Mesmo arsenal do tipo I (POEM, miotomia de Heller com fundoplicatura parcial ou dilatação "
+            "pneumática), porém com as melhores taxas de sucesso entre os subtipos, acima de 90% em séries "
             "cirúrgicas. O esôfago ainda gera pressão, o que sinaliza doença menos avançada."
         ),
         differential=[
-            "Acalásia tipo I — sem pressurização panesofágica",
-            "Obstrução da saída da JEG (EGJOO) — peristalse preservada em alguma medida",
-            "Pseudoacalásia — obriga endoscopia",
+            "Acalásia tipo I, sem pressurização panesofágica",
+            "Obstrução da saída da JEG (EGJOO), com peristalse preservada em alguma medida",
+            "Pseudoacalásia, que obriga endoscopia",
         ],
         metric_signature={
             "irp4": "> 15 mmHg",
@@ -351,14 +351,14 @@ DISEASES: tuple[Disease, ...] = (
         english="Distal esophageal spasm (DES)",
         family=FAMILY_PERISTALSIS,
         accent="#FB923C",
-        tagline="Contrações prematuras — o esôfago contrai antes da hora",
+        tagline="Contrações prematuras: o esôfago contrai antes da hora",
         summary=(
             "Distúrbio maior da peristalse em que a contração perde o sequenciamento e chega ao esôfago "
             "distal cedo demais. O marcador é a latência distal curta, não a amplitude: o problema é "
             "o momento da contração, não a sua força."
         ),
         criteria=[
-            "IRP mediana normal (≤ 15 mmHg) — se estiver elevada, o diagnóstico passa a ser acalásia tipo III.",
+            "IRP mediana normal (≤ 15 mmHg). Se estiver elevada, o diagnóstico passa a ser acalásia tipo III.",
             "Ao menos 20% de deglutições prematuras: latência distal < 4,5 s com DCI > 450 mmHg·s·cm.",
             "A v4.0 exige sintomas clinicamente relevantes (disfagia ou dor torácica não cardíaca).",
         ],
@@ -379,8 +379,8 @@ DISEASES: tuple[Disease, ...] = (
             "reservado a casos refratários e bem caracterizados."
         ),
         differential=[
-            "Acalásia tipo III — mesma prematuridade, porém com IRP elevada",
-            "Esôfago hipercontrátil — DCI muito alto, mas latência normal",
+            "Acalásia tipo III, com a mesma prematuridade porém IRP elevada",
+            "Esôfago hipercontrátil, com DCI muito alto mas latência normal",
             "Espasmo secundário a refluxo ou a obstrução mecânica",
         ],
         metric_signature={
@@ -403,14 +403,14 @@ DISEASES: tuple[Disease, ...] = (
         accent="#F87171",
         tagline="Contrações de vigor extremo com sequência preservada",
         summary=(
-            "A peristalse mantém a sequência e a latência normais, mas o vigor da contração é excessivo — "
+            "A peristalse mantém a sequência e a latência normais, mas o vigor da contração é excessivo: "
             "o integral contrátil distal ultrapassa 8.000 mmHg·s·cm, muitas vezes com contrações repetitivas "
             "sobrepostas que dão ao traçado o aspecto de “martelete”."
         ),
         criteria=[
             "IRP mediana normal (≤ 15 mmHg).",
             "Ao menos 20% de deglutições com DCI > 8.000 mmHg·s·cm.",
-            "Latência distal normal (≥ 4,5 s) — do contrário trata-se de espasmo ou acalásia tipo III.",
+            "Latência distal normal (≥ 4,5 s). Do contrário trata-se de espasmo ou acalásia tipo III.",
             "Sintomas clinicamente relevantes são exigidos pela v4.0 para nomear a condição como distúrbio.",
         ],
         topography=(
@@ -423,12 +423,12 @@ DISEASES: tuple[Disease, ...] = (
             "Sintomas de refluxo concomitantes são comuns",
         ],
         management=(
-            "Excluir causa cardíaca e obstrução distal — inclusive esofagite eosinofílica, que pode cursar com "
+            "Excluir causa cardíaca e obstrução distal, inclusive esofagite eosinofílica, que pode cursar com "
             "hipercontratilidade secundária. O tratamento começa por refluxo e neuromoduladores; relaxantes de "
             "músculo liso e, em casos refratários e bem selecionados, POEM."
         ),
         differential=[
-            "Espasmo esofágico distal — latência curta",
+            "Espasmo esofágico distal, com latência curta",
             "Hipercontratilidade secundária a obstrução distal ou esofagite eosinofílica",
             "Acalásia tipo III",
         ],
@@ -441,7 +441,7 @@ DISEASES: tuple[Disease, ...] = (
         caveat=(
             "A v4.0 considera o padrão “jackhammer” um distúrbio apenas quando acompanhado de disfagia ou dor "
             "torácica não cardíaca. O achado manométrico isolado, em paciente assintomático, não fecha "
-            "diagnóstico — e deve levar à busca de uma obstrução distal que explique a hipercontratilidade."
+            "diagnóstico, e deve levar à busca de uma obstrução distal que explique a hipercontratilidade."
         ),
         references=[
             _CC40,
@@ -452,7 +452,7 @@ DISEASES: tuple[Disease, ...] = (
 
 BY_SLUG: dict[str, Disease] = {disease.slug: disease for disease in DISEASES}
 
-# The order the network's output vector is in — alphabetical by slug, as the
+# The order the network's output vector is in: alphabetical by slug, as the
 # training corpus enumerated the class directories.
 CLASS_ORDER: tuple[str, ...] = tuple(sorted(BY_SLUG))
 

@@ -2,8 +2,8 @@
 
 A Multiplex laudo is a word-processor document that opens with the hospital
 logo (landscape) and then carries one portrait panel per water swallow.  Each
-panel is a screenshot of the plot framed by white UI chrome — the mmHg legend on
-the left, the "Eventos"/swallow-number header on top, the time axis below — and
+panel is a screenshot of the plot framed by white UI chrome (the mmHg legend on
+the left, the "Eventos"/swallow-number header on top, the time axis below), and
 the model was trained on those panels with the chrome cropped away.  So the
 reader here does exactly three things, in the same order the training corpus was
 built:
@@ -32,6 +32,11 @@ from .vendor import rtf_laudo
 from .vendor.swallow_crop import _INSET, _plot_bbox, _white_mask, clean_swallow
 
 MAX_PANELS = 200
+# A .docx is a zip, so a small upload can decompress into gigabytes. Every entry
+# is checked against its declared uncompressed size before it is read, and the
+# package as a whole against a budget.
+MAX_MEDIA_BYTES = 32 * 1024 * 1024
+MAX_TOTAL_MEDIA_BYTES = 256 * 1024 * 1024
 
 DOCX_DOCUMENT = "word/document.xml"
 DOCX_RELS = "word/_rels/document.xml.rels"
@@ -119,11 +124,19 @@ def _read_docx(data: bytes) -> list[bytes]:
     except zipfile.BadZipFile as error:
         raise ReportError("Arquivo .docx invalido ou corrompido") from error
     with archive:
-        return [
-            archive.read(name)
-            for name in _docx_media_order(archive)[:MAX_PANELS]
-            if Path(name).suffix.lower() in _RASTER_SUFFIXES
-        ]
+        rasters: list[bytes] = []
+        budget = MAX_TOTAL_MEDIA_BYTES
+        for name in _docx_media_order(archive)[:MAX_PANELS]:
+            if Path(name).suffix.lower() not in _RASTER_SUFFIXES:
+                continue
+            declared = archive.getinfo(name).file_size
+            if declared > MAX_MEDIA_BYTES or declared > budget:
+                raise ReportError(
+                    "Uma das imagens do laudo é grande demais para ser uma topografia de pressão."
+                )
+            budget -= declared
+            rasters.append(archive.read(name))
+        return rasters
 
 
 def _read_rtf(data: bytes) -> list[bytes]:
@@ -131,11 +144,20 @@ def _read_rtf(data: bytes) -> list[bytes]:
 
 
 def extract_rasters(data: bytes, filename: str) -> list[bytes]:
-    """Every embedded raster of the report, in document order."""
-    suffix = Path(filename or "").suffix.lower()
-    if suffix == ".docx" or data[:4] == b"PK\x03\x04":
+    """Every embedded raster of the report, in document order.
+
+    What the file *is* wins over what it is called: laudos get re-saved and
+    renamed on the way to a browser, and an .rtf named .docx is far more common
+    than a genuinely corrupt package.
+    """
+    if data[:4] == b"PK\x03\x04":
         return _read_docx(data)
-    if suffix == ".rtf" or data[:5] == b"{\\rtf":
+    if data[:5] == b"{\\rtf":
+        return _read_rtf(data)
+    suffix = Path(filename or "").suffix.lower()
+    if suffix == ".docx":
+        return _read_docx(data)        # raises with the right message
+    if suffix == ".rtf":
         return _read_rtf(data)
     raise ReportError("Formato nao suportado: envie o laudo em .docx ou .rtf")
 
@@ -149,7 +171,7 @@ def crop_panel(rgb: np.ndarray) -> tuple[np.ndarray | None, str]:
     The first attempt is the upstream cropper unchanged, so an in-spec panel
     reaches the encoder as the exact array the training corpus holds.  Upstream
     additionally requires the 420 px width of the Multiplex screenshots it was
-    built from — a corpus-hygiene rule, since nothing else in that batch was a
+    built from, a corpus-hygiene rule since nothing else in that batch was a
     swallow.  Here the file comes from whoever exported it, so a panel that is
     not 420 px wide but still localizes cleanly is kept and flagged
     ``accepted_off_spec`` rather than silently discarded.
@@ -178,7 +200,7 @@ def read_panels(data: bytes, filename: str) -> list[Panel]:
             with Image.open(io.BytesIO(raw)) as handle:
                 width, height = handle.size
                 rgb = np.asarray(handle.convert("RGB"))
-        except (UnidentifiedImageError, OSError, ValueError):
+        except (UnidentifiedImageError, Image.DecompressionBombError, OSError, ValueError):
             panels.append(Panel(position, 0, 0, "unreadable", None))
             continue
         if height <= width:

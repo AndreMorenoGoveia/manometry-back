@@ -199,3 +199,28 @@ def test_panel_accepted_property():
     assert Panel(1, 420, 600, "accepted", None).accepted
     assert Panel(1, 420, 600, "accepted_off_spec", None).accepted
     assert not Panel(1, 420, 600, "placeholder", None).accepted
+
+
+# ------------------------------------------------------------------ hardening
+
+
+def test_content_wins_over_the_extension():
+    """A laudo re-saved as .rtf but named .docx must still be read."""
+    assert extract_rasters(rb"{\rtf1\ansi}", "laudo.docx") == []
+
+
+def test_a_docx_holding_an_absurd_image_is_refused():
+    import zipfile as zf
+
+    data = _docx([render_panel(_topography(), 1)])
+    inflated = io.BytesIO()
+    with zf.ZipFile(io.BytesIO(data)) as source, zf.ZipFile(inflated, "w", zf.ZIP_DEFLATED) as target:
+        for item in source.namelist():
+            payload = source.read(item)
+            if item.startswith("word/media/"):
+                # Highly compressible, enormous when inflated: the classic bomb.
+                payload = b"\x89PNG\r\n\x1a\n" + b"\0" * (40 * 1024 * 1024)
+            target.writestr(item, payload)
+    assert len(inflated.getvalue()) < 1024 * 1024   # small on the wire
+    with pytest.raises(ReportError):
+        extract_rasters(inflated.getvalue(), "l.docx")

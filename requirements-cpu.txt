@@ -1,0 +1,21 @@
+# Deployment on a CPU-only host (Render, Fly, a plain container).
+#
+# The default torch wheel bundles the CUDA runtime and weighs about 2.5 GB,
+# which blows past the build limits of most managed hosts and buys nothing
+# without a GPU. This pins the CPU build instead: roughly 200 MB.
+#
+#   pip install -r requirements-cpu.txt
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch==2.6.0+cpu
+torchvision==0.21.0+cpu
+
+fastapi>=0.115
+uvicorn[standard]>=0.32
+python-multipart>=0.0.20
+pydantic>=2.9
+numpy>=1.26
+Pillow>=10.0
+scikit-learn>=1.4
+striprtf>=0.0.26
+timm>=1.0
