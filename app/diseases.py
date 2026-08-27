@@ -89,7 +89,7 @@ DISEASES: tuple[Disease, ...] = (
         ],
         metric_signature={
             "irp4": "≤ 15 mmHg",
-            "dci": "450 – 8.000 mmHg·s·cm na maioria das deglutições",
+            "dci": "450 a 8.000 mmHg·s·cm na maioria das deglutições",
             "distal_latency": "≥ 4,5 s",
         },
         prevalence=470,
@@ -158,7 +158,8 @@ DISEASES: tuple[Disease, ...] = (
         criteria=[
             "IRP mediana normal: não há obstrução da saída.",
             "Peristalse do corpo esofágico preservada (não preenche critério de MEI nem de espasmo).",
-            "Pressão basal da JEG reduzida e/ou morfologia tipo II–III (separação JEG–crura).",
+            "Pressão basal da JEG reduzida e/ou morfologia tipo II ou III, com separação entre a "
+            "JEG e a crura diafragmática.",
         ],
         topography=(
             "Peristalse distal normal, mas banda de alta pressão da JEG tênue no traçado basal e, na hérnia "
