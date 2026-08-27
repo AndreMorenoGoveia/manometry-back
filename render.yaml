@@ -4,7 +4,10 @@ services:
   - type: web
     name: manometry-back
     runtime: python
-    plan: standard          # 2 GB RAM. The 512 MB plans cannot hold the encoder.
+    # 2 GB. Serving the light encoder peaks just under 1 GB with the torch
+    # runtime, so the 512 MB plans do not fit; the heavy one needs the headroom
+    # of this plan anyway.
+    plan: standard
     buildCommand: pip install -r requirements-cpu.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
     healthCheckPath: /api/health
@@ -21,9 +24,8 @@ services:
         value: assets/model/image_chicago_calibration.json
       - key: MANOMETRY_DEVICE
         value: cpu
-      # One worker, one thread: the host reports every core of the machine and
-      # gives the container a fraction of one, and oversubscribing makes the
-      # forward pass slower.
+      # The host reports every core of the machine and gives the container a
+      # fraction of one; oversubscribing makes the forward pass slower.
       - key: MANOMETRY_TORCH_THREADS
         value: "2"
       - key: MANOMETRY_LAZY_MODEL

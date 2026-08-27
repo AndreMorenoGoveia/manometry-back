@@ -26,32 +26,45 @@ topografia recortada ──┬──▶ inversão da rampa jet ──▶ 24×241
                                             ramo Chicago + Set Transformer ──▶ 8 classes
 ```
 
-## Por que este checkpoint e não o `fusion_heavy_deploy`
+## Qual modelo o serviço carrega
 
-O checkpoint anteriormente marcado como *deploy* no repositório de
-classificação foi treinado com as métricas de Chicago derivadas dos **CSV de
-pressão** (`.cache/institutional_metrics.npy`). Um laudo não traz esses CSV, só
-imagens, então servi-lo aqui alimentaria o ramo Chicago com uma distribuição
-que ele nunca viu.
+O checkpoint anteriormente marcado como *deploy* no repositório de classificação
+foi treinado com as métricas de Chicago derivadas dos **CSV de pressão**
+(`.cache/institutional_metrics.npy`). Um laudo não traz esses CSV, só imagens,
+então servi-lo aqui alimentaria o ramo Chicago com uma distribuição que ele nunca
+viu. O commit seguinte daquele repositório introduziu
+`experiments/image_chicago.py`, que recupera as mesmas métricas exclusivamente da
+imagem renderizada, mas nenhum modelo chegou a ser treinado nessa configuração.
 
-O commit seguinte daquele repositório (`fdd46eb`) introduziu
-`experiments/image_chicago.py`, que recupera as mesmas métricas exclusivamente
-da imagem renderizada, e apontou `run_fusion_heavy.py` para elas, mas nenhum
-modelo chegou a ser treinado nessa configuração. Este serviço usa o treino
-`fusion_heavy_image_deploy`, que roda a mesma receita com as métricas de imagem,
-de forma que **inferência e treino leem a mesma coisa**. O desempenho publicado
-em `/api/model` é o desse treino, medido na sua própria partição de teste.
+Foram treinados dois, com a mesma receita e a mesma partição estrita por
+paciente, mudando só o codificador:
 
-O treino escolheu, na validação, ficar com a média de cinco recortes em vez do
-recorte central, e o serviço repete essa escolha por padrão.
-`MANOMETRY_TTA=false` volta ao recorte único: uma passada em vez de cinco, ao
-custo de cerca de dois pontos de acurácia (0,750 para 0,732), o que pode
-compensar num host sem GPU.
+| run | codificador | checkpoint | multi-crop | val macro-F1 | test macro-F1 | test acurácia |
+|---|---|---:|:--:|---:|---:|---:|
+| `fusion_light_deploy` (padrão) | ResNet-18 | 50 MB | não | **0,771** | 0,738 | **0,780** |
+| `fusion_heavy_image_deploy` | ConvNeXt-Base 22k | 342 MB | sim | 0,713 | 0,741 | 0,750 |
+
+O padrão é o leve: empata em macro-F1 e ganha em acurácia usando um sétimo dos
+pesos e um quinto do cálculo, o que é a diferença entre caber e não caber num
+container sem GPU. Uma ressalva de honestidade: o run leve varreu três sementes
+e o pesado apenas uma, então a comparação direta favorece o leve pelo orçamento
+de busca. O que se sustenta é que ele não perde nada e custa muito menos.
+
+`scripts/compare_checkpoints.py` ordena os candidatos pela macro-F1 de validação,
+que é o único número pelo qual um checkpoint pode ser escolhido, e recusa os que
+padronizaram as features a partir dos CSV: ele refaz a partição de treino do run
+e compara a média recomputada das métricas de imagem com a constante guardada no
+checkpoint.
+
+O treino grava também se ficou com o recorte central ou com a média de cinco
+recortes, e o serviço repete essa escolha. `MANOMETRY_TTA` inverte a decisão,
+porque cinco passadas podem não valer a diferença num host sem GPU.
 
 `tests/test_inference_parity.py` reexecuta a partição de teste do treino pelo
 caminho da API e exige que as probabilidades batam com as guardadas junto ao
 checkpoint, com desvio médio abaixo de 1e-3. É o que impede a transcrição da
-arquitetura de sair do lugar.
+arquitetura de sair do lugar. `tests/test_end_to_end.py` fecha o circuito pelo
+HTTP, com laudos montados a partir de exames reais.
 
 ## Instalação
 
@@ -69,7 +82,7 @@ Com os dois repositórios lado a lado nada precisa ser configurado.
 | variável | padrão | para quê |
 |---|---|---|
 | `MANOMETRY_CLASSIFICATION_ROOT` | `../manometry-classification` | raiz de onde saem checkpoint, calibração e corpus |
-| `MANOMETRY_CHECKPOINT` | `<root>/artifacts/.../model.pt` | outro checkpoint |
+| `MANOMETRY_CHECKPOINT` | `<root>/artifacts/leakage_fusion/fusion_light_deploy/.../seed_43/model.pt` | outro checkpoint |
 | `MANOMETRY_CHECKPOINT_URL` | vazio | baixa o checkpoint no primeiro boot, se o arquivo local não existir |
 | `MANOMETRY_RESULT_JSON` | `result.json` ao lado do checkpoint | métricas publicadas em `/api/model` |
 | `MANOMETRY_PREDICTIONS` | `test_predictions.npz` ao lado do checkpoint | desempenho por classe |
@@ -105,27 +118,29 @@ recortadas, medidas e descartadas com a resposta.
 
 `render.yaml` já traz o blueprint. O que decide se funciona:
 
-**Memória.** O ConvNeXt-Base ocupa cerca de 350 MB só de pesos; com o runtime do
-torch e as ativações de dez imagens, a instância precisa de **2 GB**, ou seja o
-plano Standard. Os planos de 512 MB não sustentam este codificador.
+**Memória.** Servindo o modelo leve o processo chega perto de **1 GB** de pico,
+somando o runtime do torch, os pesos e as ativações de dez imagens; com o
+ConvNeXt-Base, some mais 350 MB só de pesos. Em ambos os casos o plano é o
+**Standard (2 GB)**; os de 512 MB não sustentam nem o leve.
 
-**O arquivo de pesos.** São 342 MB, acima do limite do GitHub. Publique-o como
-release asset e aponte `MANOMETRY_CHECKPOINT_URL` para a URL: o primeiro boot
-baixa para `MANOMETRY_CHECKPOINT` e os seguintes reaproveitam enquanto o
-container viver. `scripts/stage_deploy_assets.py` copia para `assets/model/` os
-três arquivos pequenos que acompanham o checkpoint (calibração, `result.json` e
-`test_predictions.npz`), que são versionáveis.
+**O arquivo de pesos.** São 50 MB no modelo leve e 342 MB no pesado. Publique-o
+como release asset e aponte `MANOMETRY_CHECKPOINT_URL` para a URL: o primeiro
+boot baixa para `MANOMETRY_CHECKPOINT` e os seguintes reaproveitam enquanto o
+container viver. (Os 50 MB também caberiam versionados, abaixo do limite de 100
+MB do GitHub, se preferir zero configuração.) `scripts/stage_deploy_assets.py`
+copia para `assets/model/` os três arquivos pequenos que acompanham o checkpoint
+(calibração, `result.json` e `test_predictions.npz`), que são versionáveis.
 
 **Torch de CPU.** `requirements-cpu.txt` fixa a wheel sem CUDA. A padrão traz o
 runtime da NVIDIA e passa de 2 GB, o que estoura o build.
 
-**Latência.** Sem GPU, uma análise de dez deglutições leva dezenas de segundos.
-Duas alavancas antes de desistir: `MANOMETRY_TTA=false` corta o cálculo por
-cinco, e `MANOMETRY_TORCH_THREADS=2` costuma ser melhor que deixar o torch abrir
-uma thread por core anunciado pela máquina, dos quais o container só recebe uma
-fração. Se ainda assim não servir, troque o codificador por um menor: o mesmo
-estudo mede ResNet-18 com macro-F1 comparável, com 13M de parâmetros em vez de
-89M e um checkpoint de 50 MB em vez de 342 MB.
+**Latência.** Com o modelo leve, uma análise de dez deglutições leva **cerca de
+0,7 s** em duas threads de CPU depois da primeira requisição, que paga o
+aquecimento; o checkpoint sobe em pouco mais de 4 s. Com o ConvNeXt-Base e
+multi-crop, a mesma análise passa de um minuto. `MANOMETRY_TORCH_THREADS=2`
+costuma ser melhor que deixar o torch abrir uma thread por core anunciado pela
+máquina, dos quais o container só recebe uma fração, e `MANOMETRY_TTA=false`
+corta o cálculo por cinco quando o checkpoint escolhido usa multi-crop.
 
 **Primeira requisição.** Nos planos que hibernam, ela paga o boot inteiro. Com
 `MANOMETRY_LAZY_MODEL=false` o checkpoint entra na memória antes de o health

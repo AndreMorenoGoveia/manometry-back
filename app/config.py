@@ -17,14 +17,18 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CLASSIFICATION_ROOT = REPO_ROOT.parent / "manometry-classification"
 
-# The image-only run of the leakage/fusion study: a ConvNeXt-Base (ImageNet-22k)
-# encoder under the `chicago_set` study-level head, with the Chicago metrics
-# recovered from the rendered topography instead of from the pressure CSVs, so
-# that a report with nothing but images feeds the model what it was trained on.
-# Seed 42, EMA weights of epoch 9, macro-F1 0.741 over 336 held-out examinations.
+# The run this service serves: a ResNet-18 encoder under the `chicago_set`
+# study-level head, with the Chicago metrics recovered from the rendered
+# topography instead of from the pressure CSVs, so that a report carrying nothing
+# but images feeds the model what it was trained on. Chosen among three seeds by
+# validation macro-F1 (see scripts/compare_checkpoints.py); seed 43, EMA weights
+# of epoch 17. On the 336 held-out examinations: macro-F1 0.738, accuracy 0.780.
+#
+# The heavier ConvNeXt-Base run of the same recipe lives beside it at
+# `fusion_heavy_image_deploy/...` and is a drop-in for `MANOMETRY_CHECKPOINT`;
+# it scores the same and costs seven times the weights.
 DEFAULT_CHECKPOINT = (
-    "artifacts/leakage_fusion/fusion_heavy_image_deploy/chicago_set/"
-    "convnext_base_in22k/seed_42/model.pt"
+    "artifacts/leakage_fusion/fusion_light_deploy/chicago_set/resnet18/seed_43/model.pt"
 )
 DEFAULT_RESULT = DEFAULT_CHECKPOINT.replace("model.pt", "result.json")
 DEFAULT_PREDICTIONS = DEFAULT_CHECKPOINT.replace("model.pt", "test_predictions.npz")
