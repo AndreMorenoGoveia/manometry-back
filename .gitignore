@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Reference topographies exported from the corpus: patient data, regenerate
+# with scripts/export_reference_images.py (the manifest that names them IS
+# committed).
+/assets/reference/

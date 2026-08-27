@@ -1,0 +1,85 @@
+{
+  "references": {
+    "absent_contractility": {
+      "candidates": 17,
+      "distance": 2.4404,
+      "exam": "exam_002973",
+      "pattern": "failed",
+      "rank": 1,
+      "signature_match": true,
+      "split": "test",
+      "swallow": "swallow_01.png"
+    },
+    "achalasia_type_i": {
+      "candidates": 24,
+      "distance": 4.078,
+      "exam": "exam_000309",
+      "pattern": "failed",
+      "rank": 1,
+      "signature_match": true,
+      "split": "test",
+      "swallow": "swallow_03.png"
+    },
+    "achalasia_type_ii": {
+      "candidates": 26,
+      "distance": 4.45,
+      "exam": "exam_000169",
+      "pattern": "panesophageal",
+      "rank": 1,
+      "signature_match": true,
+      "split": "test",
+      "swallow": "swallow_04.png"
+    },
+    "distal_esophageal_spasm": {
+      "candidates": 9,
+      "distance": 3.097,
+      "exam": "exam_002950",
+      "pattern": "premature",
+      "rank": 4,
+      "signature_match": true,
+      "split": "test",
+      "swallow": "swallow_02.png"
+    },
+    "hypercontractile_esophagus": {
+      "candidates": 5,
+      "distance": 1.796,
+      "exam": "exam_002599",
+      "pattern": "normal",
+      "rank": 1,
+      "signature_match": false,
+      "split": "test",
+      "swallow": "swallow_06.png"
+    },
+    "hypotensive_egj": {
+      "candidates": 49,
+      "distance": 1.3753,
+      "exam": "exam_000913",
+      "pattern": "normal",
+      "rank": 1,
+      "signature_match": true,
+      "split": "test",
+      "swallow": "swallow_01.png"
+    },
+    "ineffective_esophageal_motility": {
+      "candidates": 54,
+      "distance": 2.208,
+      "exam": "exam_003141",
+      "pattern": "failed",
+      "rank": 1,
+      "signature_match": true,
+      "split": "test",
+      "swallow": "swallow_02.png"
+    },
+    "normal_motility": {
+      "candidates": 71,
+      "distance": 1.3986,
+      "exam": "exam_000664",
+      "pattern": "normal",
+      "rank": 1,
+      "signature_match": true,
+      "split": "test",
+      "swallow": "swallow_01.png"
+    }
+  },
+  "split": "test"
+}
