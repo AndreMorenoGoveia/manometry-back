@@ -5,11 +5,11 @@ topografias de pressão das dez deglutições de água e devolve a classificaç�
 exame pela **Classificação de Chicago v4.0**, junto das métricas que sustentam a
 decisão.
 
-O modelo vem de [`manometry-classification`](../manometry-classification):
-codificador ConvNeXt-Base pré-treinado em ImageNet-22k sobre cada deglutição e
-agregação `chicago_set` no nível do exame, que combina um ramo com as
-posteriores por deglutição e as métricas de Chicago a um Set Transformer sobre
-os embeddings. Partição estrita por paciente, oito classes.
+O modelo vem de [`manometry-classification`](../manometry-classification): um
+codificador pré-treinado lê cada deglutição, e a agregação `chicago_set` no nível
+do exame combina um ramo com as posteriores por deglutição e as métricas de
+Chicago a um Set Transformer sobre os embeddings. Partição estrita por paciente,
+oito classes, macro-F1 0,738 e acurácia 0,780 nos 336 exames de teste.
 
 ```
 laudo .docx/.rtf
