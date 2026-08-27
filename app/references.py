@@ -21,7 +21,7 @@ from .config import SETTINGS
 
 MANIFEST_PATH = Path(__file__).resolve().parent.parent / "assets" / "reference_manifest.json"
 
-_CACHE: dict[str, bytes | None] = {}
+_CACHE: dict[str, bytes] = {}
 _LOCK = threading.Lock()
 
 
@@ -60,13 +60,20 @@ def _resolve(slug: str) -> bytes | None:
 
 
 def reference_png(slug: str) -> bytes | None:
-    """PNG bytes of the reference topography for ``slug``, or None."""
-    if slug in _CACHE:
-        return _CACHE[slug]
-    with _LOCK:
-        if slug not in _CACHE:
-            _CACHE[slug] = _resolve(slug)
-    return _CACHE[slug]
+    """PNG bytes of the reference topography for ``slug``, or None.
+
+    Only hits are cached. A miss stays a miss on the filesystem, which costs one
+    `stat` per request and means the gallery starts working the moment the images
+    are exported, without restarting the service.
+    """
+    cached = _CACHE.get(slug)
+    if cached is not None:
+        return cached
+    payload = _resolve(slug)
+    if payload is not None:
+        with _LOCK:
+            _CACHE[slug] = payload
+    return payload
 
 
 def clear_cache() -> None:

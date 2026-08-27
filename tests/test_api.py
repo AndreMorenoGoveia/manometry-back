@@ -236,3 +236,21 @@ def test_the_forward_pass_does_not_run_on_the_event_loop(tmp_path, monkeypatch):
     response = client.post("/api/analyze", files={"file": ("laudo.docx", payload, DOCX_MIME)})
     assert response.status_code == 200
     assert seen["on_loop"] is False, "a inferencia rodou na thread do event loop"
+
+
+def test_a_reference_image_added_later_is_served_without_a_restart(tmp_path, monkeypatch):
+    """A miss must not be cached, or the gallery stays empty until a redeploy."""
+    import dataclasses
+
+    from app import references
+
+    monkeypatch.setattr(
+        references, "SETTINGS", dataclasses.replace(references.SETTINGS, reference_dir=tmp_path)
+    )
+    references.clear_cache()
+    monkeypatch.setattr(references, "load_manifest", lambda: {})
+
+    assert references.reference_png("normal_motility") is None
+    (tmp_path / "normal_motility.png").write_bytes(b"\x89PNG\r\n\x1a\nlater")
+    assert references.reference_png("normal_motility") == b"\x89PNG\r\n\x1a\nlater"
+    references.clear_cache()
