@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Copy the small model artefacts a deployed instance needs into `assets/model/`.
+"""Copy the model artefacts a deployed instance needs into `assets/model/`.
 
-Everything except the weights themselves is tiny and safe to commit:
+The light checkpoint is about 51 MB, below GitHub's 100 MB per-file limit, so
+the deploy keeps all required artefacts in the repository:
 
+* `model.pt` (the trained weights);
 * `image_chicago_calibration.json` (two numbers, no patient data);
 * `result.json` (the run's metrics, used by `/api/model`);
 * `test_predictions.npz` (the run's held-out probabilities, used for the
   per-class table).
-
-The checkpoint stays out: it is 50-350 MB depending on the encoder and belongs
-in a release asset, fetched at boot through `MANOMETRY_CHECKPOINT_URL`.
 
     python3 scripts/stage_deploy_assets.py
 """
@@ -37,6 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     sources = {
+        "model.pt": args.checkpoint,
         "image_chicago_calibration.json": args.calibration,
         "result.json": args.checkpoint.parent / "result.json",
         "test_predictions.npz": args.checkpoint.parent / "test_predictions.npz",
@@ -50,13 +50,6 @@ def main(argv: list[str] | None = None) -> int:
         shutil.copyfile(source, args.out / name)
         print(f"  {name:34s} {(args.out / name).stat().st_size / 1024:.1f} kB")
 
-    weights = args.checkpoint
-    if weights.is_file():
-        size = weights.stat().st_size / (1024 * 1024)
-        print(
-            f"\ncheckpoint: {weights} ({size:.0f} MB)\n"
-            "publique-o como release asset e aponte MANOMETRY_CHECKPOINT_URL para ele."
-        )
     return 0
 
 

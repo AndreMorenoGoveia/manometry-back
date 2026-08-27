@@ -12,14 +12,12 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
     healthCheckPath: /api/health
     envVars:
-      # A tensor file does not belong in git; point this at a release asset and
-      # the first boot fetches it into MANOMETRY_CHECKPOINT.
-      - key: MANOMETRY_CHECKPOINT_URL
-        sync: false
       - key: MANOMETRY_CHECKPOINT
-        value: /tmp/manometry/model.pt
+        value: assets/model/model.pt
       - key: MANOMETRY_RESULT_JSON
         value: assets/model/result.json
+      - key: MANOMETRY_PREDICTIONS
+        value: assets/model/test_predictions.npz
       - key: MANOMETRY_CALIBRATION
         value: assets/model/image_chicago_calibration.json
       - key: MANOMETRY_DEVICE

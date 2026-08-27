@@ -123,13 +123,11 @@ somando o runtime do torch, os pesos e as ativações de dez imagens; com o
 ConvNeXt-Base, some mais 350 MB só de pesos. Em ambos os casos o plano é o
 **Standard (2 GB)**; os de 512 MB não sustentam nem o leve.
 
-**O arquivo de pesos.** São 50 MB no modelo leve e 342 MB no pesado. Publique-o
-como release asset e aponte `MANOMETRY_CHECKPOINT_URL` para a URL: o primeiro
-boot baixa para `MANOMETRY_CHECKPOINT` e os seguintes reaproveitam enquanto o
-container viver. (Os 50 MB também caberiam versionados, abaixo do limite de 100
-MB do GitHub, se preferir zero configuração.) `scripts/stage_deploy_assets.py`
-copia para `assets/model/` os três arquivos pequenos que acompanham o checkpoint
-(calibração, `result.json` e `test_predictions.npz`), que são versionáveis.
+**O arquivo de pesos.** O modelo leve tem 51 MB e fica versionado em
+`assets/model/model.pt`, abaixo do limite de 100 MB por arquivo do GitHub. Isso
+deixa o deploy autocontido e dispensa uma URL externa. O modelo pesado tem 342 MB
+e não cabe nessa estratégia. `scripts/stage_deploy_assets.py` copia o checkpoint
+leve, a calibração, `result.json` e `test_predictions.npz` para `assets/model/`.
 
 **Torch de CPU.** `requirements-cpu.txt` fixa a wheel sem CUDA. A padrão traz o
 runtime da NVIDIA e passa de 2 GB, o que estoura o build.
