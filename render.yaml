@@ -4,9 +4,8 @@ services:
   - type: web
     name: manometry-back
     runtime: python
-    # 2 GB. Serving the light encoder peaks just under 1 GB with the torch
-    # runtime, so the 512 MB plans do not fit; the heavy one needs the headroom
-    # of this plan anyway.
+    # 2 GB. Serving the ConvNeXt-Tiny bundle peaks around 1.1 GB with the
+    # torch runtime, so the 512 MB plans do not fit.
     plan: standard
     buildCommand: pip install -r requirements-cpu.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1

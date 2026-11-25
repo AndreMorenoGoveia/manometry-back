@@ -5,11 +5,14 @@ topografias de pressão das dez deglutições de água e devolve a classificaç�
 exame pela **Classificação de Chicago v4.0**, junto das métricas que sustentam a
 decisão.
 
-O modelo vem de [`manometry-classification`](../manometry-classification): um
-codificador pré-treinado lê cada deglutição, e a agregação `chicago_set` no nível
-do exame combina um ramo com as posteriores por deglutição e as métricas de
-Chicago a um Set Transformer sobre os embeddings. Partição estrita por paciente,
-oito classes, macro-F1 0,738 e acurácia 0,780 nos 336 exames de teste.
+O modelo é o proposto no artigo JBHI de
+[`manometry-classification`](../manometry-classification) (`studies/cbm_2026`):
+um ConvNeXt-Tiny treinado em multitarefa lê cada deglutição e estima, além do
+diagnóstico, os estados e as medidas de Chicago (DCI, IRP, DL, quebra,
+pressurização), supervisionados pelos valores do próprio software de manometria.
+No nível do exame, uma logística lê os eventos de contagem exatos desses estados
+(Poisson-binomial), as frações, a IRP mediana, a compatibilidade com as regras da
+v4.0 e o caminho da imagem. Sete classes, partição por paciente.
 
 ```
 laudo .docx/.rtf
@@ -19,52 +22,49 @@ paineis  ──▶ retrato = deglutição · paisagem = logotipo
    │
    │  unifier.images.clean_swallow  (código do construtor do dataset, verbatim)
    ▼
-topografia recortada ──┬──▶ inversão da rampa jet ──▶ 24×241 ──▶ DCI, IRP4, DL, quebras
-                       │                                              │
-                       └──▶ 224px ──▶ codificador ──▶ embeddings ─────┤
-                                                                      ▼
-                                            ramo Chicago + Set Transformer ──▶ 8 classes
+topografia recortada ──┬──▶ 224px ──▶ ConvNeXt-Tiny ──┬──▶ estados + DCI/IRP/DL por deglutição
+                       │                              └──▶ diagnóstico por deglutição
+                       │                                          │
+                       │               eventos de contagem + regras v4.0 + imagem
+                       │                                          ▼
+                       │                               logística ──▶ 7 classes
+                       └──▶ inversão da rampa jet ──▶ quebras, JEG basal (só exibição)
 ```
 
 ## Qual modelo o serviço carrega
 
-O checkpoint anteriormente marcado como *deploy* no repositório de classificação
-foi treinado com as métricas de Chicago derivadas dos **CSV de pressão**
-(`.cache/institutional_metrics.npy`). Um laudo não traz esses CSV, só imagens,
-então servi-lo aqui alimentaria o ramo Chicago com uma distribuição que ele nunca
-viu. O commit seguinte daquele repositório introduziu
-`experiments/image_chicago.py`, que recupera as mesmas métricas exclusivamente da
-imagem renderizada, mas nenhum modelo chegou a ser treinado nessa configuração.
+O artigo avalia o modelo em 15 partições repetidas de 5 folds (75 folds): macro-F1
+0,825 e acurácia 0,928, contra 0,697 e 0,836 da média das probabilidades por
+deglutição. Só o encoder da partição 42, fold 0, foi guardado (os outros 74 foram
+treinados, extraídos e descartados), então é ele que o serviço carrega.
+`studies/cbm_2026/experiments/jbhi_deploy.py` reajusta o readout desse fold
+exatamente como `jbhi_fusion.py` faz (logística nos pacientes de treino, C e
+temperatura na validação) e grava o bundle em
+`studies/cbm_2026/artifacts/jbhi_2026_11/deploy/`. Nos 358 exames de teste desse
+fold: macro-F1 0,849, acurácia 0,944.
 
-Foram treinados dois, com a mesma receita e a mesma partição estrita por
-paciente, mudando só o codificador:
+| classe | F1 no teste do fold | exames de teste |
+|---|---:|---:|
+| contratilidade ausente | 0,954 | 33 |
+| acalásia tipo I | 0,894 | 23 |
+| acalásia tipo II | 0,875 | 32 |
+| obstrução da saída da JEG | 0,500 | 5 |
+| esôfago hipercontrátil | 0,800 | 7 |
+| motilidade esofágica ineficaz | 0,944 | 69 |
+| motilidade normal | 0,976 | 189 |
 
-| run | codificador | checkpoint | multi-crop | val macro-F1 | test macro-F1 | test acurácia |
-|---|---|---:|:--:|---:|---:|---:|
-| `fusion_light_deploy` (padrão) | ResNet-18 | 50 MB | não | **0,771** | 0,738 | **0,780** |
-| `fusion_heavy_image_deploy` | ConvNeXt-Base 22k | 342 MB | sim | 0,713 | 0,741 | 0,750 |
+Os pesos ficam em meia precisão no disco (56 MB, abaixo do limite de 100 MB do
+GitHub) e voltam a float32 na carga. O que o serviço mostra por deglutição (padrão
+de contratilidade, DCI, IRP 4s, latência distal) e as portas de Chicago do estudo
+saem das cabeças de medida do modelo, as mesmas que o readout consome. Quebras,
+pressão basal da JEG e frações de pressurização continuam vindo da inversão da
+rampa de cor e são só evidência de apoio: o modelo não as lê.
 
-O padrão é o leve: empata em macro-F1 e ganha em acurácia usando um sétimo dos
-pesos e um quinto do cálculo, o que é a diferença entre caber e não caber num
-container sem GPU. Uma ressalva de honestidade: o run leve varreu três sementes
-e o pesado apenas uma, então a comparação direta favorece o leve pelo orçamento
-de busca. O que se sustenta é que ele não perde nada e custa muito menos.
-
-`scripts/compare_checkpoints.py` ordena os candidatos pela macro-F1 de validação,
-que é o único número pelo qual um checkpoint pode ser escolhido, e recusa os que
-padronizaram as features a partir dos CSV: ele refaz a partição de treino do run
-e compara a média recomputada das métricas de imagem com a constante guardada no
-checkpoint.
-
-O treino grava também se ficou com o recorte central ou com a média de cinco
-recortes, e o serviço repete essa escolha. `MANOMETRY_TTA` inverte a decisão,
-porque cinco passadas podem não valer a diferença num host sem GPU.
-
-`tests/test_inference_parity.py` reexecuta a partição de teste do treino pelo
-caminho da API e exige que as probabilidades batam com as guardadas junto ao
-checkpoint, com desvio médio abaixo de 1e-3. É o que impede a transcrição da
-arquitetura de sair do lugar. `tests/test_end_to_end.py` fecha o circuito pelo
-HTTP, com laudos montados a partir de exames reais.
+`tests/test_inference_parity.py` reexecuta os exames de teste do fold pelo caminho
+da API, a partir dos PNG do corpus, e exige que as probabilidades batam com as
+guardadas no bundle. Nos 358 exames: concordância de 100% no argmax, desvio médio
+8,5e-5 (bfloat16 na GPU do treino contra float32 aqui). `tests/test_end_to_end.py`
+fecha o circuito pelo HTTP, com laudos montados a partir de exames reais.
 
 ## Instalação
 
@@ -82,16 +82,15 @@ Com os dois repositórios lado a lado nada precisa ser configurado.
 | variável | padrão | para quê |
 |---|---|---|
 | `MANOMETRY_CLASSIFICATION_ROOT` | `../manometry-classification` | raiz de onde saem checkpoint, calibração e corpus |
-| `MANOMETRY_CHECKPOINT` | `<root>/artifacts/leakage_fusion/fusion_light_deploy/.../seed_43/model.pt` | outro checkpoint |
+| `MANOMETRY_CHECKPOINT` | `<root>/studies/cbm_2026/artifacts/jbhi_2026_11/deploy/model.pt` | outro bundle |
 | `MANOMETRY_CHECKPOINT_URL` | vazio | baixa o checkpoint no primeiro boot, se o arquivo local não existir |
 | `MANOMETRY_RESULT_JSON` | `result.json` ao lado do checkpoint | métricas publicadas em `/api/model` |
 | `MANOMETRY_PREDICTIONS` | `test_predictions.npz` ao lado do checkpoint | desempenho por classe |
-| `MANOMETRY_CALIBRATION` | `<root>/.cache/image_chicago_calibration.json` | calibração da rampa de cor |
+| `MANOMETRY_CALIBRATION` | `assets/model/image_chicago_calibration.json` | calibração da rampa de cor |
 | `MANOMETRY_DATASET_ROOT` | `<root>/data` | corpus, para imagens de referência e laudos de exemplo |
 | `MANOMETRY_REFERENCE_DIR` | `assets/reference` | PNG de referência já exportados |
 | `MANOMETRY_SAMPLE_DIR` | `assets/samples` | laudos de demonstração já gerados |
 | `MANOMETRY_DEVICE` | `auto` | `cuda`, `cpu` |
-| `MANOMETRY_TTA` | segue o treino | `false` usa só o recorte central, 5x menos cálculo |
 | `MANOMETRY_TORCH_THREADS` | `0` (deixa o torch decidir) | limita as threads em container compartilhado |
 | `MANOMETRY_LAZY_MODEL` | `true` | `false` carrega o checkpoint no boot, para readiness probe |
 | `MANOMETRY_MAX_UPLOAD_BYTES` | `67108864` | limite do upload |
@@ -105,7 +104,7 @@ Com os dois repositórios lado a lado nada precisa ser configurado.
 | `POST` | `/api/analyze` | laudo `.docx`/`.rtf` para diagnóstico, ranking, métricas por deglutição e portas de Chicago |
 | `GET` | `/api/health` | estado do serviço e se o checkpoint está acessível |
 | `GET` | `/api/model` | procedência do modelo e desempenho por classe na partição de teste |
-| `GET` | `/api/diseases` | texto clínico das oito classes |
+| `GET` | `/api/diseases` | texto clínico das sete classes |
 | `GET` | `/api/diseases/{slug}/reference.png` | topografia real da classe |
 | `GET` | `/api/vocabulary` | rótulos dos padrões de deglutição e das métricas |
 | `GET` | `/api/samples` | classes com laudo de exemplo nesta instância |
@@ -114,31 +113,88 @@ Com os dois repositórios lado a lado nada precisa ser configurado.
 O arquivo enviado nunca toca o disco: é lido em memória, as imagens são
 recortadas, medidas e descartadas com a resposta.
 
+## Deploy no Cloud Run
+
+O `Dockerfile` empacota a API, o bundle do modelo e apenas as dependências de CPU.
+O mesmo repositório é implantado diretamente pelo Cloud Build; não é necessário
+criar um repositório separado nem manter o Render no caminho da inferência.
+
+Antes do primeiro deploy, instale o [Google Cloud CLI](https://cloud.google.com/sdk/docs/install),
+crie ou selecione um projeto com faturamento habilitado e autentique:
+
+```bash
+gcloud auth login
+gcloud config set project SEU_PROJECT_ID
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
+```
+
+Na raiz deste repositório, publique inicialmente em `us-central1`, que usa como
+referência os preços da cota gratuita do Cloud Run:
+
+```bash
+gcloud run deploy manometry-back \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --memory 2Gi \
+  --cpu 2 \
+  --concurrency 1 \
+  --min 0 \
+  --max 1 \
+  --timeout 300 \
+  --cpu-boost \
+  --set-env-vars 'MANOMETRY_CHECKPOINT=assets/model/model.pt,MANOMETRY_RESULT_JSON=assets/model/result.json,MANOMETRY_PREDICTIONS=assets/model/test_predictions.npz,MANOMETRY_CALIBRATION=assets/model/image_chicago_calibration.json,MANOMETRY_DEVICE=cpu,MANOMETRY_TORCH_THREADS=2,MANOMETRY_LAZY_MODEL=false,MANOMETRY_ALLOWED_ORIGINS=https://SEU_FRONT.vercel.app,MANOMETRY_ALLOWED_ORIGIN_REGEX=https://.*\.vercel\.app'
+```
+
+Troque `SEU_PROJECT_ID` e `https://SEU_FRONT.vercel.app`. A saída do deploy traz
+uma URL `https://...run.app`; teste `GET /api/health` nela e depois configure essa
+URL, sem barra final, como `VITE_API_BASE` no projeto do frontend na Vercel.
+Como variáveis `VITE_*` entram no bundle durante o build, faça um novo deploy do
+frontend depois da troca.
+
+As escolhas acima são intencionais:
+
+- **2 GiB** comportam o pico próximo de 1 GiB do processo;
+- **um worker e concorrência 1** impedem inferências simultâneas de disputarem
+  CPU e memória dentro da mesma instância;
+- **mínimo zero** preserva o scale-to-zero e a cota gratuita;
+- **máximo um** evita custo e uso de memória multiplicados durante a validação;
+- **startup CPU boost** reduz o tempo de importação do PyTorch e carga do modelo;
+- **modelo não lazy** faz a instância ficar pronta apenas depois de carregar o
+  checkpoint.
+
+Para menor latência de rede no Brasil, `southamerica-east1` pode substituir
+`us-central1`, mas os preços regionais podem consumir a cota gratuita de forma
+diferente. Orçamentos do Google Cloud apenas alertam: não funcionam como teto de
+gastos. Mantenha `--max 1`, configure alertas de faturamento e acompanhe o uso.
+
+Enquanto valida o Cloud Run, o Render pode continuar online. Para voltar, basta
+restaurar `VITE_API_BASE` na Vercel; nenhuma alteração de código é necessária.
+
 ## Deploy no Render
 
 `render.yaml` já traz o blueprint. O que decide se funciona:
 
-**Memória.** Servindo o modelo leve o processo chega perto de **1 GB** de pico,
-somando o runtime do torch, os pesos e as ativações de dez imagens; com o
-ConvNeXt-Base, some mais 350 MB só de pesos. Em ambos os casos o plano é o
-**Standard (2 GB)**; os de 512 MB não sustentam nem o leve.
+**Memória.** O processo chega perto de **1,1 GB** de pico, somando o runtime do
+torch, os pesos do ConvNeXt-Tiny e as ativações de dez imagens. O plano é o
+**Standard (2 GB)**; os de 512 MB não sustentam.
 
-**O arquivo de pesos.** O modelo leve tem 51 MB e fica versionado em
-`assets/model/model.pt`, abaixo do limite de 100 MB por arquivo do GitHub. Isso
-deixa o deploy autocontido e dispensa uma URL externa. O modelo pesado tem 342 MB
-e não cabe nessa estratégia. `scripts/stage_deploy_assets.py` copia o checkpoint
-leve, a calibração, `result.json` e `test_predictions.npz` para `assets/model/`.
+**O arquivo de pesos.** O bundle tem 56 MB (pesos em meia precisão) e fica
+versionado em `assets/model/model.pt`, abaixo do limite de 100 MB por arquivo do
+GitHub. Isso deixa o deploy autocontido e dispensa uma URL externa.
+`scripts/stage_deploy_assets.py` copia o bundle, `result.json` e
+`test_predictions.npz` de `manometry-classification` para `assets/model/`.
 
 **Torch de CPU.** `requirements-cpu.txt` fixa a wheel sem CUDA. A padrão traz o
 runtime da NVIDIA e passa de 2 GB, o que estoura o build.
 
-**Latência.** Com o modelo leve, uma análise de dez deglutições leva **cerca de
-0,7 s** em duas threads de CPU depois da primeira requisição, que paga o
-aquecimento; o checkpoint sobe em pouco mais de 4 s. Com o ConvNeXt-Base e
-multi-crop, a mesma análise passa de um minuto. `MANOMETRY_TORCH_THREADS=2`
-costuma ser melhor que deixar o torch abrir uma thread por core anunciado pela
-máquina, dos quais o container só recebe uma fração, e `MANOMETRY_TTA=false`
-corta o cálculo por cinco quando o checkpoint escolhido usa multi-crop.
+**Latência.** Uma análise de dez deglutições leva **cerca de 1,8 s** em duas
+threads de CPU (notebook) depois da primeira requisição, que paga o aquecimento;
+o encoder responde por 1,5 s disso (8,9 GFLOPs por deglutição) e o bundle sobe em
+cerca de 3 s. As miniaturas PNG da resposta somam outros 2 a 3 s. Numa GPU o
+forward cai para 3 ms. `MANOMETRY_TORCH_THREADS=2` costuma ser melhor que deixar o
+torch abrir uma thread por core anunciado pela máquina, dos quais o container só
+recebe uma fração.
 
 **Primeira requisição.** Nos planos que hibernam, ela paga o boot inteiro. Com
 `MANOMETRY_LAZY_MODEL=false` o checkpoint entra na memória antes de o health
@@ -174,17 +230,20 @@ python3 -m pytest --runslow    # inclui a paridade contra o treino
 
 ## Limites que este serviço não esconde
 
-- **As métricas são proxies de imagem.** DCI, IRP, latência e quebras são
-  recuperadas invertendo a rampa de cor do gráfico, ancorada numa calibração
-  global ajustada apenas em exames normais de treino. Servem para justificar a
+- **As métricas são estimativas a partir da imagem.** DCI, IRP, latência e os
+  estados por deglutição saem das cabeças de medida do modelo; quebras e JEG
+  basal, da inversão da rampa de cor do gráfico. Servem para justificar a
   decisão; não são medidas do sistema de aquisição e não devem ser transcritas
   para um laudo.
-- **Duas classes da v4.0 estão fora**: obstrução da saída da JEG (n=12) e
-  acalásia tipo III (n=5) não têm exames suficientes para uma partição em três
-  partes. Um exame dessas condições será forçado à classe mais próxima.
-- **`hypotensive_egj` não é um diagnóstico da v4.0**, e sim o rótulo que o
-  serviço de origem usa para barreira antirrefluxo incompetente com corpo
-  esofágico normal. A ressalva viaja junto do texto clínico da classe.
+- **Duas classes da v4.0 estão fora**: espasmo esofágico distal (n=4) e acalásia
+  tipo III (n=3), depois da recontagem das deglutições prematuras com o corte de
+  4,5 s da v4.0. Um exame dessas condições será forçado à classe mais próxima.
+- **Obstrução da saída da JEG é a classe fraca** (18 exames no corpus, F1 0,50
+  nos 5 de teste do fold) e segue uma regra simplificada: IRP elevada sem 100% de
+  falhas. A ressalva viaja junto do texto clínico da classe.
+- **Um fold, não o ensemble do artigo.** Os números do artigo são a média de 75
+  folds; o serviço carrega um deles. O desempenho dele está acima da média, mas
+  num teste de 358 exames.
 - **As imagens do corpus trazem as anotações de medida do próprio software**:
   caixas, distâncias em cm, tempos em s e valores de DCI desenhados sobre o
   traçado. Elas estão presentes tanto no treino quanto no teste, então parte do

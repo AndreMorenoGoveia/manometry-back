@@ -1,12 +1,12 @@
-"""Clinical reference for the eight diagnoses the classifier can return.
+"""Clinical reference for the seven diagnoses the classifier can return.
 
 Every entry follows the Chicago Classification v4.0 (Yadlapati et al., *Neurogastroenterol
 Motil* 2021;33:e14058), which is the framework the reports in the training corpus
 were written against.  Two entries need a word of warning and carry it in their own
-text: `hypotensive_egj` is not a CC v4.0 motility diagnosis but a barrier finding
-this service's corpus labels explicitly, and `hypercontractile_esophagus` is a
-manometric pattern that CC v4.0 only calls a disorder in the presence of dysphagia
-or non-cardiac chest pain, and manometry alone cannot close that diagnosis.
+text: `egj_outflow_obstruction` is labelled by a simplified rule (elevated IRP without
+100% failed swallows) because the report lacks what CC v4.0 adds to it, and
+`hypercontractile_esophagus` is a manometric pattern that CC v4.0 only calls a
+disorder in the presence of dysphagia or non-cardiac chest pain.
 
 The numeric cut-offs quoted here are the CC v4.0 ones.  The values this service
 computes from an uploaded report are *image-calibrated proxies* recovered from the
@@ -19,7 +19,6 @@ from dataclasses import asdict, dataclass, field
 
 FAMILY_EGJ = "Obstrução da saída da junção esofagogástrica"
 FAMILY_PERISTALSIS = "Distúrbios da peristalse"
-FAMILY_BARRIER = "Achado de barreira antirrefluxo"
 FAMILY_NORMAL = "Exame normal"
 
 
@@ -92,7 +91,7 @@ DISEASES: tuple[Disease, ...] = (
             "dci": "450 a 8.000 mmHg·s·cm na maioria das deglutições",
             "distal_latency": "≥ 4,5 s",
         },
-        prevalence=470,
+        prevalence=921,
         references=[_CC40, _HRM_PRIMER],
     ),
     Disease(
@@ -139,63 +138,8 @@ DISEASES: tuple[Disease, ...] = (
             "dci": "< 450 mmHg·s·cm em mais de 70% das deglutições",
             "distal_latency": "normal quando há contração mensurável",
         },
-        prevalence=354,
+        prevalence=343,
         references=[_CC40, _HRM_PRIMER],
-    ),
-    Disease(
-        slug="hypotensive_egj",
-        name="Junção esofagogástrica hipotensiva",
-        short_name="JEG hipotensiva",
-        english="Hypotensive esophagogastric junction / hiatal hernia",
-        family=FAMILY_BARRIER,
-        accent="#38BDF8",
-        tagline="Barreira antirrefluxo incompetente com corpo esofágico preservado",
-        summary=(
-            "Não é um distúrbio de motilidade: é a descrição manométrica de uma barreira antirrefluxo fraca, "
-            "com pressão basal da JEG baixa e frequentemente com separação entre o esfíncter inferior e a "
-            "crura diafragmática (hérnia hiatal), em um esôfago cujo corpo contrai normalmente."
-        ),
-        criteria=[
-            "IRP mediana normal: não há obstrução da saída.",
-            "Peristalse do corpo esofágico preservada (não preenche critério de MEI nem de espasmo).",
-            "Pressão basal da JEG reduzida e/ou morfologia tipo II ou III, com separação entre a "
-            "JEG e a crura diafragmática.",
-        ],
-        topography=(
-            "Peristalse distal normal, mas banda de alta pressão da JEG tênue no traçado basal e, na hérnia "
-            "hiatal, duas bandas separadas (o esfíncter inferior acima e a crura diafragmática abaixo) em "
-            "vez de uma única zona de alta pressão."
-        ),
-        symptoms=[
-            "Pirose e regurgitação, tipicamente pós-prandiais e posturais",
-            "Refluxo noturno",
-            "Sintomas extraesofágicos: tosse, rouquidão, pigarro",
-        ],
-        management=(
-            "A conduta é a da doença do refluxo: inibidor de bomba de prótons, perda de peso, elevação da "
-            "cabeceira. A caracterização da JEG e do tamanho da hérnia é parte do preparo cirúrgico quando "
-            "se cogita fundoplicatura ou reparo do hiato."
-        ),
-        differential=[
-            "Motilidade normal com JEG de pressão limítrofe",
-            "Motilidade esofágica ineficaz associada a refluxo",
-        ],
-        metric_signature={
-            "irp4": "≤ 15 mmHg",
-            "dci": "predominantemente ≥ 450 mmHg·s·cm",
-            "egj_basal": "pressão basal da JEG reduzida",
-        },
-        prevalence=327,
-        caveat=(
-            "A Classificação de Chicago v4.0 não lista “JEG hipotensiva” entre os diagnósticos motores: "
-            "ela descreve a morfologia da JEG e a barreira antirrefluxo em separado. Esta classe reproduz "
-            "o rótulo usado nos laudos do serviço de origem, onde descreve exames com barreira incompetente "
-            "e corpo esofágico normal."
-        ),
-        references=[
-            _CC40,
-            "Gyawali CP, et al. Modern diagnosis of GERD: the Lyon Consensus. Gut. 2018;67:1351-1362",
-        ],
     ),
     Disease(
         slug="absent_contractility",
@@ -241,7 +185,7 @@ DISEASES: tuple[Disease, ...] = (
             "dci": "< 100 mmHg·s·cm em 100% das deglutições",
             "distal_latency": "não mensurável, pois não há contração",
         },
-        prevalence=109,
+        prevalence=153,
         references=[
             _CC40,
             "Roman S, Kahrilas PJ. Management of spastic disorders of the esophagus. Gastroenterol Clin North Am. 2013",
@@ -290,7 +234,7 @@ DISEASES: tuple[Disease, ...] = (
             "dci": "< 100 mmHg·s·cm em todas as deglutições",
             "pressurization": "< 20% das deglutições",
         },
-        prevalence=161,
+        prevalence=115,
         references=[
             _CC40,
             "Pandolfino JE, et al. Achalasia: a new clinically relevant classification by HRM. Gastroenterology. 2008;135:1526-33",
@@ -339,60 +283,72 @@ DISEASES: tuple[Disease, ...] = (
             "dci": "< 100 mmHg·s·cm (sem contração verdadeira)",
             "pressurization": "≥ 20% das deglutições com pressurização panesofágica",
         },
-        prevalence=168,
+        prevalence=156,
         references=[
             _CC40,
             "Rohof WO, et al. Outcomes of treatment for achalasia depend on manometric subtype. Gastroenterology. 2013;144:718-25",
         ],
     ),
     Disease(
-        slug="distal_esophageal_spasm",
-        name="Espasmo esofágico distal",
-        short_name="Espasmo distal",
-        english="Distal esophageal spasm (DES)",
-        family=FAMILY_PERISTALSIS,
-        accent="#FB923C",
-        tagline="Contrações prematuras: o esôfago contrai antes da hora",
+        slug="egj_outflow_obstruction",
+        name="Obstrução da saída da junção esofagogástrica",
+        short_name="Obstrução da JEG",
+        english="Esophagogastric junction outflow obstruction (EGJOO)",
+        family=FAMILY_EGJ,
+        accent="#38BDF8",
+        tagline="A JEG não relaxa, mas o corpo esofágico ainda contrai",
         summary=(
-            "Distúrbio maior da peristalse em que a contração perde o sequenciamento e chega ao esôfago "
-            "distal cedo demais. O marcador é a latência distal curta, não a amplitude: o problema é "
-            "o momento da contração, não a sua força."
+            "A junção esofagogástrica não relaxa o suficiente durante a deglutição, como na acalásia, mas o "
+            "corpo esofágico mantém peristalse ou contrações suficientes para não preencher critério de "
+            "acalásia. Pode ser um distúrbio primário, uma acalásia em fase inicial ou consequência de uma "
+            "causa mecânica (estenose, hérnia, fundoplicatura apertada, infiltração) ou do uso de opioides."
         ),
         criteria=[
-            "IRP mediana normal (≤ 15 mmHg). Se estiver elevada, o diagnóstico passa a ser acalásia tipo III.",
-            "Ao menos 20% de deglutições prematuras: latência distal < 4,5 s com DCI > 450 mmHg·s·cm.",
-            "A v4.0 exige sintomas clinicamente relevantes (disfagia ou dor torácica não cardíaca).",
+            "IRP mediana elevada (> 15 mmHg na posição supina e na ortostática).",
+            "Peristalse presente: os critérios de acalásia (100% de deglutições falhas ou espasmo) não são preenchidos.",
+            "A v4.0 exige ainda pressurização intrabolus elevada em ≥ 20% das deglutições supinas e sintomas "
+            "compatíveis (disfagia ou dor torácica não cardíaca).",
+            "O diagnóstico só é conclusivo com um teste complementar alterado: esofagograma baritado "
+            "temporizado ou planimetria por impedância (FLIP).",
         ],
         topography=(
-            "A faixa de contração perde a inclinação diagonal característica e aparece quase vertical ou "
-            "simultânea no esôfago distal, alcançando o ponto de desaceleração contrátil antes de 4,5 s do "
-            "início da deglutição."
+            "Barra de alta pressão da JEG que persiste durante a janela deglutitória, com frente contrátil "
+            "presente no corpo esofágico e, muitas vezes, pressurização do bolus no compartimento logo acima "
+            "da junção."
         ),
         symptoms=[
-            "Dor torácica não cardíaca, frequentemente intensa e em aperto",
-            "Disfagia intermitente para sólidos e líquidos",
-            "Sintomas desencadeados por líquidos muito frios ou quentes e por estresse",
+            "Disfagia para sólidos e líquidos",
+            "Dor torácica não cardíaca",
+            "Regurgitação",
         ],
         management=(
-            "Investigação obrigatória de causa cardíaca antes de atribuir a dor ao esôfago. O tratamento é "
-            "sintomático: relaxantes de músculo liso (nitratos, bloqueadores de canal de cálcio), inibidores "
-            "de fosfodiesterase, neuromoduladores em dose baixa e tratamento de refluxo associado; POEM fica "
-            "reservado a casos refratários e bem caracterizados."
+            "Antes de tratar como distúrbio motor primário, investigar causas mecânicas (endoscopia, tomografia "
+            "ou ecoendoscopia) e suspender opioides quando possível. Com causa excluída e obstrução confirmada "
+            "por esofagograma ou FLIP, as opções seguem as da acalásia: dilatação pneumática, toxina botulínica, "
+            "miotomia endoscópica (POEM) ou laparoscópica. Muitos casos assintomáticos resolvem sem tratamento."
         ),
         differential=[
-            "Acalásia tipo III, com a mesma prematuridade porém IRP elevada",
-            "Esôfago hipercontrátil, com DCI muito alto mas latência normal",
-            "Espasmo secundário a refluxo ou a obstrução mecânica",
+            "Acalásia tipo I ou II em fase inicial",
+            "Obstrução mecânica: estenose, hérnia hiatal, fundoplicatura apertada, lesão infiltrativa",
+            "Efeito de opioides",
+            "IRP elevada por artefato de posicionamento do cateter",
         ],
         metric_signature={
-            "irp4": "≤ 15 mmHg",
-            "dci": "> 450 mmHg·s·cm nas deglutições prematuras",
-            "distal_latency": "< 4,5 s em ao menos 20% das deglutições",
+            "irp4": "> 15 mmHg",
+            "dci": "contrações presentes (não 100% falhas)",
+            "distal_latency": "geralmente preservada",
         },
-        prevalence=54,
+        prevalence=18,
+        caveat=(
+            "Neste serviço o rótulo segue a regra do conjunto de dados: IRP mediana elevada sem 100% de "
+            "deglutições falhas. Os requisitos adicionais da v4.0 (posição ortostática, pressurização "
+            "intrabolus, sintomas e teste complementar) não estão no laudo e não entram. É também a classe com "
+            "menos exames no treino (18), e a menos confiável do modelo."
+        ),
         references=[
             _CC40,
-            "Roman S, Kahrilas PJ. Distal esophageal spasm. Curr Opin Gastroenterol. 2015;31:328-33",
+            "Beveridge CA, et al. Esophagogastric junction outflow obstruction: diagnosis and treatment. "
+            "Gastroenterol Hepatol. 2021",
         ],
     ),
     Disease(
@@ -438,7 +394,7 @@ DISEASES: tuple[Disease, ...] = (
             "dci": "> 8.000 mmHg·s·cm em ao menos 20% das deglutições",
             "distal_latency": "≥ 4,5 s",
         },
-        prevalence=38,
+        prevalence=36,
         caveat=(
             "A v4.0 considera o padrão “jackhammer” um distúrbio apenas quando acompanhado de disfagia ou dor "
             "torácica não cardíaca. O achado manométrico isolado, em paciente assintomático, não fecha "

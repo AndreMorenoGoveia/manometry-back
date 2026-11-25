@@ -8,18 +8,10 @@ import pytest
 from app.diseases import BY_SLUG, CLASS_ORDER, DISEASES, get
 from app.schemas import METRIC_LABELS, SWALLOW_PATTERNS
 from app.vendor.chicago import METRIC_NAMES, SWALLOW_PATTERNS as CHICAGO_PATTERNS
+from app.vendor.jbhi_readout import RULE_ORDER
 
-# The eight classes of the trained model, in the order the corpus enumerated them.
-EXPECTED = (
-    "absent_contractility",
-    "achalasia_type_i",
-    "achalasia_type_ii",
-    "distal_esophageal_spasm",
-    "hypercontractile_esophagus",
-    "hypotensive_egj",
-    "ineffective_esophageal_motility",
-    "normal_motility",
-)
+# The seven classes of the trained model, in the order of its output vector.
+EXPECTED = RULE_ORDER
 
 
 def test_covers_exactly_the_model_classes():
@@ -56,12 +48,12 @@ def test_accents_are_distinct():
 
 
 def test_prevalence_matches_the_corpus():
-    # 1008 train + 337 val + 336 test examinations of the strict partition.
-    assert sum(disease.prevalence for disease in DISEASES) == 1681
+    # 1035 train + 349 val + 358 test examinations of partition 42 fold 0.
+    assert sum(disease.prevalence for disease in DISEASES) == 1742
 
 
 def test_the_two_entries_that_need_a_caveat_carry_one():
-    assert BY_SLUG["hypotensive_egj"].caveat
+    assert BY_SLUG["egj_outflow_obstruction"].caveat
     assert BY_SLUG["hypercontractile_esophagus"].caveat
 
 

@@ -1,18 +1,18 @@
 {
   "references": {
     "absent_contractility": {
-      "candidates": 17,
-      "distance": 2.4404,
-      "exam": "exam_002973",
+      "candidates": 24,
+      "distance": 2.5399,
+      "exam": "exam_000306",
       "pattern": "failed",
       "rank": 1,
       "signature_match": true,
       "split": "test",
-      "swallow": "swallow_01.png"
+      "swallow": "swallow_02.png"
     },
     "achalasia_type_i": {
-      "candidates": 24,
-      "distance": 4.078,
+      "candidates": 18,
+      "distance": 3.4317,
       "exam": "exam_000309",
       "pattern": "failed",
       "rank": 1,
@@ -21,59 +21,49 @@
       "swallow": "swallow_03.png"
     },
     "achalasia_type_ii": {
-      "candidates": 26,
-      "distance": 4.45,
-      "exam": "exam_000169",
+      "candidates": 24,
+      "distance": 3.4023,
+      "exam": "exam_003336",
       "pattern": "panesophageal",
       "rank": 1,
       "signature_match": true,
       "split": "test",
-      "swallow": "swallow_04.png"
+      "swallow": "swallow_07.png"
     },
-    "distal_esophageal_spasm": {
-      "candidates": 9,
-      "distance": 3.097,
-      "exam": "exam_002950",
-      "pattern": "premature",
-      "rank": 4,
-      "signature_match": true,
-      "split": "test",
-      "swallow": "swallow_02.png"
-    },
-    "hypercontractile_esophagus": {
-      "candidates": 5,
-      "distance": 1.796,
-      "exam": "exam_002599",
-      "pattern": "normal",
-      "rank": 1,
-      "signature_match": false,
-      "split": "test",
-      "swallow": "swallow_06.png"
-    },
-    "hypotensive_egj": {
-      "candidates": 49,
-      "distance": 1.3753,
-      "exam": "exam_000913",
+    "egj_outflow_obstruction": {
+      "candidates": 3,
+      "distance": 3.4899,
+      "exam": "exam_002174",
       "pattern": "normal",
       "rank": 1,
       "signature_match": true,
       "split": "test",
       "swallow": "swallow_01.png"
     },
-    "ineffective_esophageal_motility": {
-      "candidates": 54,
-      "distance": 2.208,
-      "exam": "exam_003141",
-      "pattern": "failed",
+    "hypercontractile_esophagus": {
+      "candidates": 5,
+      "distance": 1.538,
+      "exam": "exam_001455",
+      "pattern": "normal",
       "rank": 1,
-      "signature_match": true,
+      "signature_match": false,
       "split": "test",
       "swallow": "swallow_02.png"
     },
+    "ineffective_esophageal_motility": {
+      "candidates": 52,
+      "distance": 1.9134,
+      "exam": "exam_000684",
+      "pattern": "weak",
+      "rank": 1,
+      "signature_match": true,
+      "split": "test",
+      "swallow": "swallow_01.png"
+    },
     "normal_motility": {
-      "candidates": 71,
-      "distance": 1.3986,
-      "exam": "exam_000664",
+      "candidates": 136,
+      "distance": 1.4839,
+      "exam": "exam_000562",
       "pattern": "normal",
       "rank": 1,
       "signature_match": true,

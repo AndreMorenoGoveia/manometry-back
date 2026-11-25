@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Copy the model artefacts a deployed instance needs into `assets/model/`.
 
-The light checkpoint is about 51 MB, below GitHub's 100 MB per-file limit, so
-the deploy keeps all required artefacts in the repository:
+The JBHI bundle is about 56 MB (half-precision weights), below GitHub's 100 MB
+per-file limit, so the deploy keeps all required artefacts in the repository
+(`image_chicago_calibration.json` already lives there):
 
-* `model.pt` (the trained weights);
-* `image_chicago_calibration.json` (two numbers, no patient data);
+* `model.pt` (weights and readout);
 * `result.json` (the run's metrics, used by `/api/model`);
 * `test_predictions.npz` (the run's held-out probabilities, used for the
   per-class table).
@@ -31,13 +31,11 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--checkpoint", type=Path, default=SETTINGS.checkpoint_path)
-    parser.add_argument("--calibration", type=Path, default=SETTINGS.calibration_path)
     parser.add_argument("--out", type=Path, default=TARGET)
     args = parser.parse_args(argv)
 
     sources = {
         "model.pt": args.checkpoint,
-        "image_chicago_calibration.json": args.calibration,
         "result.json": args.checkpoint.parent / "result.json",
         "test_predictions.npz": args.checkpoint.parent / "test_predictions.npz",
     }

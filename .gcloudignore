@@ -1,0 +1,11 @@
+# Never upload repository history, local environments, caches or patient-derived
+# material to Cloud Build. Docker only needs the staged assets copied explicitly
+# by Dockerfile.
+.gcloudignore
+.git
+#!include:.gitignore
+
+tests/
+scripts/
+assets/reference/
+assets/samples/

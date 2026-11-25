@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from app.inference import _to_data_uri, summarise_study
-from app.model import EVAL_OFFSET, IMAGE_SIZE, MAX_SWALLOWS, stack_exam, to_cache_window
+from app.model import EVAL_OFFSET, IMAGE_SIZE, to_cache_window
 from app.vendor.chicago import DCI_FAILED, DCI_HYPER, DCI_WEAK
 
 BASE = {
@@ -91,19 +91,6 @@ def test_cache_window_is_the_centre_224_of_a_256_square():
     assert EVAL_OFFSET == 16
 
 
-def test_stack_pads_to_ten_slots_and_masks_the_rest():
-    windows = [np.zeros((IMAGE_SIZE, IMAGE_SIZE, 3), dtype=np.uint8) for _ in range(4)]
-    images, mask = stack_exam(windows)
-    assert images.shape == (1, MAX_SWALLOWS, IMAGE_SIZE, IMAGE_SIZE, 3)
-    assert mask.tolist() == [[True] * 4 + [False] * 6]
-
-
-def test_stack_truncates_beyond_ten():
-    windows = [np.zeros((IMAGE_SIZE, IMAGE_SIZE, 3), dtype=np.uint8) for _ in range(13)]
-    images, mask = stack_exam(windows)
-    assert images.shape[1] == MAX_SWALLOWS and bool(mask.all())
-
-
 def test_thumbnail_is_a_png_data_uri():
     uri = _to_data_uri(np.zeros((600, 400, 3), dtype=np.uint8))
     assert uri.startswith("data:image/png;base64,")
@@ -184,3 +171,20 @@ def test_per_class_metrics_refuse_a_mismatched_prediction_file(tmp_path):
     )
     classifier.classes = ["a", "b"]           # two classes, file holds three
     assert classifier._per_class_metrics() is None
+
+
+def test_state_patterns_follow_the_heads():
+    import torch
+
+    from app.inference import state_patterns
+
+    big = 20.0
+    aux = torch.full((3, 10), -big)
+    aux[0, 0] = big                  # failed
+    aux[1, 2] = big; aux[1, 6] = big  # normal vigor, pan-pressurized
+    aux[2, 2] = big; aux[2, 4] = big  # normal vigor, premature
+    patterns, summary = state_patterns(aux)
+    assert patterns == ["failed", "panesophageal", "premature"]
+    assert abs(summary["failed_fraction"] - 1 / 3) < 1e-6
+    assert summary["panesophageal_gate"] and summary["premature_gate"]
+    assert not summary["absent_contractility_gate"]

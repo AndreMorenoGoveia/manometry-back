@@ -136,7 +136,6 @@ class ModelCard(BaseModel):
     device: str = "cpu"
     selected_epoch: int | None = None
     selected_weights: str | None = None
-    tta: bool = False
     test_metrics: dict[str, float] | None = None
     val_metrics: dict[str, float] | None = None
     exam_counts: dict[str, int] | None = None

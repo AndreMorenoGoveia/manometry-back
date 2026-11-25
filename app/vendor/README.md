@@ -11,7 +11,11 @@ upstream and re-sync instead.
 | `rtf_laudo.py` | `manometry-data-unifier` · `unifier/rtf.py` | `fd6ab6f` |
 | `chicago.py` | `manometry-classification` · `experiments/chicago.py` | `fdd46eb` |
 | `image_chicago.py` | `manometry-classification` · `experiments/image_chicago.py` | `fdd46eb` |
-| `fusion_models.py` | `manometry-classification` · `experiments/fusion_models.py` | `fdd46eb` |
+| `jbhi_readout.py` | `manometry-classification` · `studies/cbm_2026/experiments/{chicago_cardinality,jbhi_fusion}.py` (extract) | `9b913b0` |
+
+`jbhi_readout.py` is the exception: an extract of the readout functions, because
+the upstream modules import the whole training stack. `tests/test_inference_parity.py`
+checks it end to end instead of byte for byte.
 
 The only edit applied on copy is the import line of `image_chicago.py`
 (`from chicago import ...` -> `from .chicago import ...`), because upstream runs

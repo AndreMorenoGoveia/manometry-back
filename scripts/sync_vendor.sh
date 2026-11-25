@@ -9,7 +9,6 @@ VENDOR="$HERE/app/vendor"
 
 cp "$CLASSIFICATION/experiments/chicago.py"        "$VENDOR/chicago.py"
 cp "$CLASSIFICATION/experiments/image_chicago.py"  "$VENDOR/image_chicago.py"
-cp "$CLASSIFICATION/experiments/fusion_models.py"  "$VENDOR/fusion_models.py"
 cp "$UNIFIER/unifier/images.py"                    "$VENDOR/swallow_crop.py"
 cp "$UNIFIER/unifier/rtf.py"                       "$VENDOR/rtf_laudo.py"
 

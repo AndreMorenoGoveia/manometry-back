@@ -1,0 +1,26 @@
+.git
+.github
+.agents
+.codex
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.venv
+__pycache__
+*.py[cod]
+*.log
+.env
+.env.*
+
+# Training/test material is not needed by the API image and may contain patient
+# data. Only the explicitly copied, staged deployment assets enter the image.
+tests
+scripts
+assets/reference
+assets/samples
+
+README.md
+LICENSE
+render.yaml
+requirements.txt
+pyproject.toml

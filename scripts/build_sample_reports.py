@@ -20,6 +20,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import numpy as np  # noqa: E402
+
 from app.config import SETTINGS  # noqa: E402
 from app.diseases import CLASS_ORDER  # noqa: E402
 from app.sample import build_docx, laudo_from_exam  # noqa: E402
@@ -31,7 +33,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--dataset-root", type=Path, default=SETTINGS.dataset_root)
     parser.add_argument("--out", type=Path, default=SETTINGS.sample_dir)
-    parser.add_argument("--split", default="test", choices=("train", "val", "test"))
     parser.add_argument("--only", nargs="*", default=list(CLASS_ORDER))
     parser.add_argument("--index", type=int, default=0, help="qual exame da classe usar")
     args = parser.parse_args(argv)
@@ -39,14 +40,23 @@ def main(argv: list[str] | None = None) -> int:
     if not args.dataset_root.is_dir():
         raise SystemExit(f"corpus ausente em {args.dataset_root}")
 
+    # Only examinations the served model never trained on: the held-out patients of its fold, by their
+    # corrected label (the corpus folders still carry the pre-correction one).
+    held_out = np.load(SETTINGS.predictions_path)
+    by_class: dict[str, list[Path]] = {slug: [] for slug in CLASS_ORDER}
+    for exam_id, target in zip(held_out["exam_ids"], held_out["targets"]):
+        folder = next(args.dataset_root.glob(f"*/*/{exam_id}"), None)
+        if folder is not None:
+            by_class[CLASS_ORDER[int(target)]].append(folder)
+
     args.out.mkdir(parents=True, exist_ok=True)
     written = 0
     for slug in args.only:
         if slug not in CLASS_ORDER:
             raise SystemExit(f"classe desconhecida: {slug}")
-        exams = sorted((args.dataset_root / args.split / slug).glob("exam_*"))
+        exams = sorted(by_class[slug], key=lambda path: path.name)
         if not exams:
-            print(f"  {slug:34s} sem exames em {args.split}")
+            print(f"  {slug:34s} sem exames de teste no corpus")
             continue
         exam = exams[args.index % len(exams)]
         destination = args.out / f"{slug}.docx"

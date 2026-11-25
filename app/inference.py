@@ -1,15 +1,13 @@
 """Score one HRM examination and describe how the score was reached.
 
 The service loads the checkpoint once and answers `analyse()` calls under a
-lock: a single ConvNeXt-Base forward over ten 224px panels is already a
-GPU-sized unit of work, so serialising is what keeps concurrent uploads from
-fighting over VRAM instead of speeding anything up.
+lock, so concurrent uploads queue instead of fighting over CPU and memory.
 
-Everything the UI shows about *why* a study was called comes from the same
-tensors the classifier itself consumed (the image-calibrated Chicago v4.0
-proxies per swallow, their CC v4.0 contractility pattern, and the per-swallow
-posteriors of the instance head), so the explanation cannot drift from the
-prediction.
+DCI, IRP 4s and distal latency per swallow are the model's own measurement
+heads, the quantities its readout consumes, so the explanation follows the
+prediction. The remaining per-swallow values (breaks, EGJ basal pressure,
+pressurization) are image-calibrated colour proxies, shown as supporting
+evidence only; the model does not read them.
 """
 from __future__ import annotations
 
@@ -25,15 +23,7 @@ import numpy as np
 from PIL import Image
 
 from .config import SETTINGS, Settings, fetch_checkpoint
-from .model import (
-    MAX_SWALLOWS,
-    TTA_OFFSETS,
-    HeavyExamModel,
-    stack_exam,
-    to_cache_square,
-    to_model_input,
-    window,
-)
+from .model import MAX_SWALLOWS, MultitaskSwallowModel, to_cache_window, to_model_input
 from .vendor.chicago import (
     DCI_FAILED,
     DCI_HYPER,
@@ -41,10 +31,10 @@ from .vendor.chicago import (
     DL_PREMATURE,
     IRP_UPPER,
     METRIC_NAMES,
-    study_features,
     swallow_pattern,
 )
 from .vendor.image_chicago import ImageCalibration, image_swallow_metrics
+from .vendor.jbhi_readout import RULE_ORDER, readout_features, swallow_states
 
 THUMBNAIL_MAX_SIDE = 360
 
@@ -89,10 +79,10 @@ def _to_data_uri(rgb: np.ndarray) -> str:
 def summarise_study(rows: list[dict[str, float]]) -> dict[str, float | bool | int]:
     """The CC v4.0 study-level statistics and gates, in reader's terms.
 
-    Same quantities the ``chicago`` branch of the network consumes, kept as named
-    numbers here so the interface can state the reasoning instead of only the
-    verdict.  They are *image-calibrated proxies* recovered from the rendered
-    topography, not measurements read off the acquisition system.
+    In `analyse` the DCI, IRP and latency of each row are the model's measurement
+    heads, and the fractions and gates computed here are then replaced by
+    `state_patterns`; breaks and EGJ basal pressure stay image-calibrated colour
+    proxies. None of them is a measurement read off the acquisition system.
     """
     dci = np.array([row["dci"] for row in rows], dtype=np.float32)
     irp = np.array([row["irp4"] for row in rows], dtype=np.float32)
@@ -139,20 +129,60 @@ def summarise_study(rows: list[dict[str, float]]) -> dict[str, float | bool | in
     }
 
 
+def state_patterns(aux) -> tuple[list[str], dict[str, float | bool]]:
+    """CC v4.0 swallow patterns and study fractions from the model's state heads.
+
+    The fractions are the expected ones the readout consumes (jbhi_readout.readout_features); each swallow's
+    pattern takes the most likely state in the precedence of `chicago.swallow_pattern`.
+    """
+    v, premature, pan, fragmented, _ = (t.numpy() for t in swallow_states(aux.double()))
+    vigor = v.argmax(1)
+    patterns = []
+    for k in range(len(vigor)):
+        if pan[k, 1] > 0.5 and vigor[k] != 3:
+            patterns.append("panesophageal")
+        elif vigor[k] in (0, 1):
+            patterns.append(("failed", "weak")[vigor[k]])
+        elif premature[k, 1] > 0.5:
+            patterns.append("premature")
+        elif vigor[k] == 3:
+            patterns.append("hypercontractile")
+        elif fragmented[k, 1] > 0.5:
+            patterns.append("fragmented")
+        else:
+            patterns.append("normal")
+    contracted = v[:, 2] + v[:, 3]
+    failed = float(v[:, 0].mean())
+    ineffective = float(np.minimum(v[:, 0] + v[:, 1] + contracted * fragmented[:, 1], 1).mean())
+    early = float((contracted * premature[:, 1]).mean())
+    hyper = float(v[:, 3].mean())
+    pressurized = float(pan[:, 1].mean())
+    return patterns, {
+        "failed_fraction": failed,
+        "ineffective_fraction": ineffective,
+        "premature_fraction": early,
+        "hypercontractile_fraction": hyper,
+        "panesophageal_fraction": pressurized,
+        "absent_contractility_gate": bool((vigor == 0).all()),
+        "ineffective_gate": ineffective > 0.7,
+        "premature_gate": early >= 0.2,
+        "hypercontractile_gate": hyper >= 0.2,
+        "panesophageal_gate": pressurized >= 0.2,
+    }
+
+
 class ManometryClassifier:
     """Lazily loaded singleton around the trained checkpoint."""
 
     def __init__(self, settings: Settings = SETTINGS) -> None:
         self.settings = settings
         self._lock = threading.Lock()
-        self._model: HeavyExamModel | None = None
+        self._model: MultitaskSwallowModel | None = None
         self.device = None
-        self.tta = False
         self._torch = None
         self.classes: list[str] = []
         self.calibration: ImageCalibration | None = None
-        self.study_mean: np.ndarray | None = None
-        self.study_std: np.ndarray | None = None
+        self.readout: dict = {}
         self.card: dict = {}
 
     # ------------------------------------------------------------- loading
@@ -191,37 +221,16 @@ class ManometryClassifier:
             if self.settings.torch_threads > 0:
                 torch.set_num_threads(self.settings.torch_threads)
             checkpoint = fetch_checkpoint(self.settings)
-            # The checkpoint is a local build artifact of the sibling training
-            # repository and stores numpy standardisation arrays alongside the
-            # tensors, which the weights-only unpickler cannot rebuild.
-            payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
-            config = payload.get("config", {})
+            # The bundle is written by `jbhi_deploy.py` upstream: plain tensors only.
+            payload = torch.load(checkpoint, map_location="cpu", weights_only=True)
             self.classes = list(payload["classes"])
-            self.study_mean = np.asarray(payload["study_mean"], dtype=np.float32)
-            self.study_std = np.asarray(payload["study_std"], dtype=np.float32)
+            assert tuple(self.classes) == RULE_ORDER, "a ordem das classes do bundle difere da do readout"
+            self.readout = {key: value.to(torch.float64) for key, value in payload["readout"].items()}
             self.calibration = ImageCalibration.load(self.settings.calibration_path)
-            # Reproduce the run by default: it chose between the centre window
-            # and the five-crop average on its own validation examinations, and
-            # recorded which one it kept in `result.json`, not in the checkpoint.
-            # `MANOMETRY_TTA` overrides, because on a CPU-only host five forward
-            # passes may not be worth the accuracy.
-            result = self._result()
-            self.tta = (
-                bool(result.get("tta_selected", False))
-                if self.settings.tta is None
-                else self.settings.tta
-            )
 
-            model = HeavyExamModel(
-                payload["encoder"],
-                payload["fusion"],
-                len(self.classes),
-                int(payload["metric_dim"]),
-                drop_path=0.0,
-                hidden=int(config.get("hidden", 256)),
-                dropout=float(config.get("dropout", 0.2)),
-            )
-            model.load_state_dict(payload["state_dict"], strict=True)
+            model = MultitaskSwallowModel(len(self.classes))
+            # Stored in half precision to fit git; upcast to the float32 the run evaluated with.
+            model.load_state_dict({k: v.float() for k, v in payload["state_dict"].items()}, strict=True)
             device = self._resolve_device()
             model.eval().to(device).to(memory_format=torch.channels_last)
             self.device = device
@@ -279,27 +288,15 @@ class ManometryClassifier:
 
     def _build_card(self, payload: dict) -> dict:
         result = self._result()
-        selection = payload.get("selection", {})
         return {
             "encoder": payload.get("encoder"),
-            "fusion": payload.get("fusion"),
-            "seed": payload.get("seed"),
+            "fusion": "jbhi_proposed",
+            "seed": payload.get("partition"),
             "classes": self.classes,
             "max_swallows": MAX_SWALLOWS,
             "device": str(getattr(self, "device", "cpu")),
-            "selected_epoch": selection.get("epoch"),
-            "selected_weights": selection.get("weights"),
-            "tta": self.tta,
-            # Publish the numbers of the path this service actually runs, not
-            # whichever line of the result file reads best.
-            "test_metrics": (
-                result.get("test_metrics_tta") if self.tta else result.get("test_metrics_centre")
-            )
-            or result.get("test_metrics"),
-            "val_metrics": (
-                result.get("val_metrics_tta") if self.tta else result.get("val_metrics")
-            )
-            or result.get("val_metrics"),
+            "test_metrics": result.get("test_metrics"),
+            "val_metrics": result.get("val_metrics"),
             "exam_counts": result.get("exam_counts"),
             "per_class": self._per_class_metrics(),
             "calibration": {
@@ -337,46 +334,24 @@ class ManometryClassifier:
         assert torch is not None and self._model is not None
         started = time.perf_counter()
 
-        # Every swallow is measured, but the network reads at most ten slots;
+        # Every swallow is measured, but the network reads at most ten;
         # the surplus is reported and marked unused rather than dropped silently.
         rows, confidences = self.metric_rows(swallows)
-        used = rows[:MAX_SWALLOWS]
-        study = study_features(used)
-        standardised = ((study - self.study_mean) / self.study_std).astype(np.float32)
+        windows = np.stack([to_cache_window(image) for image in swallows[:MAX_SWALLOWS]])
 
-        squares = [to_cache_square(image) for image in swallows[:MAX_SWALLOWS]]
-        offsets = TTA_OFFSETS if self.tta else (TTA_OFFSETS[0],)
-        study = torch.from_numpy(standardised).unsqueeze(0)
-
-        exam_probabilities = np.zeros(len(self.classes))
-        swallow_probabilities = np.zeros((MAX_SWALLOWS, len(self.classes)))
         with self._lock:
             with torch.inference_mode():
-                # The crops are run one at a time rather than as one batch of
-                # five: same arithmetic, a fifth of the peak memory.
-                for offset in offsets:
-                    images, mask = stack_exam([window(square, offset) for square in squares])
-                    flat = images.reshape(-1, *images.shape[2:])
-                    pixels = to_model_input(flat, self.device).reshape(
-                        1, MAX_SWALLOWS, 3, images.shape[2], images.shape[3]
-                    )
-                    with torch.autocast(
-                        "cuda", dtype=torch.bfloat16, enabled=self.device.type == "cuda"
-                    ):
-                        exam_logits, instance_logits = self._model(
-                            pixels, mask.to(self.device), study.to(self.device)
-                        )
-                    exam_probabilities += (
-                        torch.softmax(exam_logits.float(), dim=1)[0].cpu().numpy().astype(np.float64)
-                    )
-                    swallow_probabilities += (
-                        torch.softmax(instance_logits.float(), dim=2)[0]
-                        .cpu()
-                        .numpy()
-                        .astype(np.float64)
-                    )
-        exam_probabilities /= len(offsets)
-        swallow_probabilities /= len(offsets)
+                pixels = to_model_input(torch.from_numpy(windows), self.device)
+                with torch.autocast("cuda", dtype=torch.bfloat16, enabled=self.device.type == "cuda"):
+                    logits, aux = self._model(pixels)
+        logits, aux = logits.float().cpu(), aux.float().cpu()
+        exam_probabilities, swallow_probabilities = self._readout(logits, aux)
+
+        # The measurement heads replace the colour proxies for the three values the readout is built on.
+        for row, (log_dci, irp, latency) in zip(rows, aux[:, -3:].tolist()):
+            row.update(dci=float(np.expm1(max(log_dci, 0.0))), irp4=irp, distal_latency=latency)
+        used = rows[:MAX_SWALLOWS]
+        patterns, state_summary = state_patterns(aux)
 
         readings: list[SwallowReading] = []
         for position, (image, row) in enumerate(zip(swallows, rows)):
@@ -384,7 +359,8 @@ class ManometryClassifier:
             readings.append(
                 SwallowReading(
                     index=position + 1,
-                    pattern=swallow_pattern(row),
+                    # Beyond the tenth swallow the model gives no states; the colour proxies are all there is.
+                    pattern=patterns[position] if in_model else swallow_pattern(row),
                     metrics={name: float(value) for name, value in row.items()},
                     colour_confidence=confidences[position],
                     probabilities=swallow_probabilities[position] if in_model else np.zeros(len(self.classes)),
@@ -397,9 +373,21 @@ class ManometryClassifier:
             probabilities=exam_probabilities,
             classes=list(self.classes),
             swallows=readings,
-            study_summary=summarise_study(used),
+            study_summary={**summarise_study(used), **state_summary},
             elapsed_ms=(time.perf_counter() - started) * 1000.0,
         )
+
+    def _readout(self, logits, aux) -> tuple[np.ndarray, np.ndarray]:
+        """jbhi_fusion's `proposed`: logistic over the readout features, then the validation temperature."""
+        torch = self._torch
+        r = self.readout
+        swallow = torch.softmax(logits.double(), dim=1)
+        mask = torch.ones(1, len(aux), dtype=torch.bool)
+        x = readout_features(aux[None], mask, swallow.mean(0).log()[None])
+        z = ((x - r["feature_mean"]) / r["feature_std"] - r["scaler_mean"]) / r["scaler_scale"]
+        logp = torch.log_softmax(z @ r["coef"].T + r["intercept"], dim=1).clamp_min(np.log(1e-12))
+        exam = torch.softmax(logp / r["temperature"], dim=1)[0]
+        return exam.numpy(), swallow.numpy()
 
 
 CLASSIFIER = ManometryClassifier()

@@ -17,34 +17,18 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CLASSIFICATION_ROOT = REPO_ROOT.parent / "manometry-classification"
 
-# The run this service serves: a ResNet-18 encoder under the `chicago_set`
-# study-level head, with the Chicago metrics recovered from the rendered
-# topography instead of from the pressure CSVs, so that a report carrying nothing
-# but images feeds the model what it was trained on. Chosen among three seeds by
-# validation macro-F1 (see scripts/compare_checkpoints.py); seed 43, EMA weights
-# of epoch 17. On the 336 held-out examinations: macro-F1 0.738, accuracy 0.780.
-#
-# The heavier ConvNeXt-Base run of the same recipe lives beside it at
-# `fusion_heavy_image_deploy/...` and is a drop-in for `MANOMETRY_CHECKPOINT`;
-# it scores the same and costs seven times the weights.
-DEFAULT_CHECKPOINT = (
-    "artifacts/leakage_fusion/fusion_light_deploy/chicago_set/resnet18/seed_43/model.pt"
-)
+# The run this service serves: the JBHI proposed model (ConvNeXt-Tiny trained multitask on the diagnosis and the
+# per-swallow reference measurements, read out over exact Chicago count events), partition 42 fold 0, the only fold
+# whose encoder was kept. Exported by `studies/cbm_2026/experiments/jbhi_deploy.py`. On its 358 held-out
+# examinations: macro-F1 0.849, accuracy 0.944 (paper, 75 folds: 0.825 and 0.928).
+DEFAULT_CHECKPOINT = "studies/cbm_2026/artifacts/jbhi_2026_11/deploy/model.pt"
 DEFAULT_RESULT = DEFAULT_CHECKPOINT.replace("model.pt", "result.json")
 DEFAULT_PREDICTIONS = DEFAULT_CHECKPOINT.replace("model.pt", "test_predictions.npz")
-DEFAULT_CALIBRATION = ".cache/image_chicago_calibration.json"
 
 
 def _path(name: str, fallback: Path) -> Path:
     value = os.environ.get(name)
     return Path(value).expanduser() if value else fallback
-
-
-def _optional_flag(name: str) -> bool | None:
-    value = os.environ.get(name)
-    if value is None or not value.strip():
-        return None
-    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _flag(name: str, fallback: bool) -> bool:
@@ -65,7 +49,6 @@ class Settings:
     reference_dir: Path
     sample_dir: Path
     device: str
-    tta: bool | None
     torch_threads: int
     max_upload_bytes: int
     checkpoint_url: str = ""
@@ -90,13 +73,14 @@ def load_settings() -> Settings:
         checkpoint_path=_path("MANOMETRY_CHECKPOINT", root / DEFAULT_CHECKPOINT),
         result_path=_path("MANOMETRY_RESULT_JSON", root / DEFAULT_RESULT),
         predictions_path=_path("MANOMETRY_PREDICTIONS", root / DEFAULT_PREDICTIONS),
-        calibration_path=_path("MANOMETRY_CALIBRATION", root / DEFAULT_CALIBRATION),
+        # Two numbers, no patient data: kept in this repository.
+        calibration_path=_path(
+            "MANOMETRY_CALIBRATION", REPO_ROOT / "assets" / "model" / "image_chicago_calibration.json"
+        ),
         dataset_root=_path("MANOMETRY_DATASET_ROOT", root / "data"),
         reference_dir=_path("MANOMETRY_REFERENCE_DIR", REPO_ROOT / "assets" / "reference"),
         sample_dir=_path("MANOMETRY_SAMPLE_DIR", REPO_ROOT / "assets" / "samples"),
         device=os.environ.get("MANOMETRY_DEVICE", "auto"),
-        # None means "do what the checkpoint's own run decided".
-        tta=_optional_flag("MANOMETRY_TTA"),
         # Managed hosts report every core of the machine while giving the
         # container a fraction of one; letting torch spawn a thread per reported
         # core makes a forward pass slower, not faster.

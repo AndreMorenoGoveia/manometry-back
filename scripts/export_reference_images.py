@@ -42,7 +42,7 @@ from app.vendor.image_chicago import ImageCalibration, image_swallow_metrics  # 
 FALLBACK_RANK: dict[str, tuple[str, bool]] = {
     "hypercontractile_esophagus": ("dci", True),
     "achalasia_type_ii": ("pan_time_fraction", True),
-    "distal_esophageal_spasm": ("distal_latency", False),
+    "egj_outflow_obstruction": ("irp4", True),
     "absent_contractility": ("dci", False),
     "achalasia_type_i": ("dci", False),
     "ineffective_esophageal_motility": ("dci", False),
@@ -53,11 +53,10 @@ FALLBACK_RANK: dict[str, tuple[str, bool]] = {
 SIGNATURE_PATTERN: dict[str, tuple[str, ...]] = {
     "normal_motility": ("normal",),
     "ineffective_esophageal_motility": ("weak", "failed", "fragmented"),
-    "hypotensive_egj": ("normal",),
     "absent_contractility": ("failed",),
     "achalasia_type_i": ("failed",),
     "achalasia_type_ii": ("panesophageal",),
-    "distal_esophageal_spasm": ("premature",),
+    "egj_outflow_obstruction": ("normal",),
     "hypercontractile_esophagus": ("hypercontractile",),
 }
 

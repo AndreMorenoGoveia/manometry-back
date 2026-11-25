@@ -17,7 +17,6 @@ UNIFIER = SETTINGS.classification_root.parent / "manometry-data-unifier"
 
 ORIGINS = {
     "chicago.py": SETTINGS.classification_root / "experiments" / "chicago.py",
-    "fusion_models.py": SETTINGS.classification_root / "experiments" / "fusion_models.py",
     "image_chicago.py": SETTINGS.classification_root / "experiments" / "image_chicago.py",
     "swallow_crop.py": UNIFIER / "unifier" / "images.py",
     "rtf_laudo.py": UNIFIER / "unifier" / "rtf.py",
@@ -44,4 +43,5 @@ def test_vendored_file_matches_upstream(name: str):
 
 def test_every_vendored_module_is_declared():
     present = {path.name for path in VENDOR.glob("*.py")} - {"__init__.py"}
-    assert present == set(ORIGINS)
+    # jbhi_readout.py is an extract, not a copy; test_inference_parity.py checks it end to end.
+    assert present == set(ORIGINS) | {"jbhi_readout.py"}
