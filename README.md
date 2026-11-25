@@ -128,13 +128,13 @@ gcloud config set project SEU_PROJECT_ID
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
 ```
 
-Na raiz deste repositório, publique inicialmente em `us-central1`, que usa como
-referência os preços da cota gratuita do Cloud Run:
+Na raiz deste repositório, publique em `southamerica-east1` (São Paulo), para que
+os laudos sejam processados no Brasil:
 
 ```bash
 gcloud run deploy manometry-back \
   --source . \
-  --region us-central1 \
+  --region southamerica-east1 \
   --allow-unauthenticated \
   --memory 2Gi \
   --cpu 2 \
@@ -163,13 +163,15 @@ As escolhas acima são intencionais:
 - **modelo não lazy** faz a instância ficar pronta apenas depois de carregar o
   checkpoint.
 
-Para menor latência de rede no Brasil, `southamerica-east1` pode substituir
-`us-central1`, mas os preços regionais podem consumir a cota gratuita de forma
-diferente. Orçamentos do Google Cloud apenas alertam: não funcionam como teto de
+São Paulo tem preço por segundo mais alto que `us-central1`, o que pode consumir
+a cota gratuita de forma diferente; com uso esporádico continua perto de zero.
+O repositório de imagens do Artifact Registry tem política de limpeza que mantém
+só as duas versões mais recentes, para caber nos 0,5 GB gratuitos. Orçamentos do Google Cloud apenas alertam: não funcionam como teto de
 gastos. Mantenha `--max 1`, configure alertas de faturamento e acompanhe o uso.
 
-Enquanto valida o Cloud Run, o Render pode continuar online. Para voltar, basta
-restaurar `VITE_API_BASE` na Vercel; nenhuma alteração de código é necessária.
+Em produção o serviço responde em
+`https://manometry-back-273216239564.southamerica-east1.run.app`, que é o
+`VITE_API_BASE` do frontend na Vercel.
 
 ## Deploy no Render
 
