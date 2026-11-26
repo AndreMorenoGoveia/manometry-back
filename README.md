@@ -138,7 +138,7 @@ gcloud run deploy manometry-back \
   --allow-unauthenticated \
   --memory 2Gi \
   --cpu 2 \
-  --concurrency 1 \
+  --concurrency 8 \
   --min 0 \
   --max 1 \
   --timeout 300 \
